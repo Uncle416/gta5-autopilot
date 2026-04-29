@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package gta_autopilot;
+
+// Top-level message sent every tick (~20Hz) from C# mod to Python.
+message TelemetryFrame {
+    uint64 timestamp_ms = 1;         // Game time in milliseconds
+    uint64 frame_id = 2;             // Monotonically increasing frame counter
+
+    VehicleState vehicle = 3;        // Ego vehicle state
+    PathInfo path = 4;               // Navigation path info
+    ControlCommand command = 5;      // Phase 1 control output (ground truth)
+    repeated EntityState entities = 6; // Nearby vehicles and pedestrians
+    TrafficLightState traffic_light = 7;
+
+    // Reserved for Phase 2: RGB image data sent separately via shared memory.
+    // The image_frame_id links this telemetry to the corresponding image.
+    uint64 image_frame_id = 8;
+}
+
+// ==================== Vehicle State ====================
+
+message VehicleState {
+    float pos_x = 1;
+    float pos_y = 2;
+    float pos_z = 3;
+    float heading = 4;               // Radians
+    float speed = 5;                 // m/s
+    float velocity_x = 6;
+    float velocity_y = 7;
+    float velocity_z = 8;
+    float acceleration = 9;          // m/s²
+    float steer_angle = 10;          // Current steering angle (degrees)
+    float engine_rpm = 11;
+    int32 gear = 12;                 // Current gear
+    bool is_engine_running = 13;
+    bool lights_on = 14;
+    bool high_beams_on = 15;
+    bool wipers_on = 16;
+}
+
+// ==================== Path Info ====================
+
+message PathInfo {
+    bool has_destination = 1;
+    float dest_x = 2;
+    float dest_y = 3;
+    float dest_z = 4;
+    float waypoint_x = 5;
+    float waypoint_y = 6;
+    float waypoint_z = 7;
+    float road_heading = 8;          // Radians
+    bool is_intersection_ahead = 9;
+    float distance_to_intersection = 10;
+    bool is_at_intersection = 11;
+    int32 road_type = 12;            // 0=urban, 1=highway, 2=alley, 3=gravel
+    int32 lane_count = 13;
+    float distance_to_destination = 14;
+}
+
+// ==================== Control Command ====================
+
+message ControlCommand {
+    float steer = 1;                 // -1..1
+    float throttle = 2;              // 0..1
+    float brake = 3;                 // 0..1
+    bool handbrake = 4;
+    bool reverse = 5;
+    float target_speed = 6;          // m/s
+    string decision_state = 7;       // FSM state name
+}
+
+// ==================== Entity State ====================
+
+message EntityState {
+    int32 entity_id = 1;
+    bool is_vehicle = 2;
+    bool is_pedestrian = 3;
+    float pos_x = 4;
+    float pos_y = 5;
+    float pos_z = 6;
+    float speed = 7;                 // m/s
+    float velocity_x = 8;
+    float velocity_y = 9;
+    float velocity_z = 10;
+    float distance = 11;             // Distance to ego vehicle
+    float heading = 12;              // Radians
+    bool is_in_forward_cone = 13;
+    bool is_oncoming = 14;
+    float time_to_collision = 15;    // Seconds, max float if non-colliding
+}
+
+// ==================== Traffic Light ====================
+
+enum TrafficLightState {
+    TRAFFIC_LIGHT_NONE = 0;
+    TRAFFIC_LIGHT_GREEN = 1;
+    TRAFFIC_LIGHT_YELLOW = 2;
+    TRAFFIC_LIGHT_RED = 3;
+}

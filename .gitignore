@@ -1,0 +1,33 @@
+# GTA V Mod
+phase1_rule_based/GTA5AutoPilot/bin/
+phase1_rule_based/GTA5AutoPilot/obj/
+phase1_rule_based/GTA5AutoPilot/.vs/
+phase1_rule_based/deps/*.dll
+phase1_rule_based/deps/*.xml
+
+# Visual Studio
+*.suo
+*.user
+*.vs/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# ML / Data
+phase2_vision/data/
+phase2_vision/experiments/runs/
+phase2_vision/experiments/logs/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
