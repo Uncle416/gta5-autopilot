@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows.Forms;
 using GTA;
 using GTA5AutoPilot.Modules;
@@ -34,9 +35,14 @@ namespace GTA5AutoPilot
         // State
         private bool _autoPilotEnabled;
         private bool _recordingEnabled;
+        private PerceptionMode _perceptionMode = PerceptionMode.GameAPI;
+
+        // Phase 2: visual perception receiver
+        private VisionDataReceiver _visionReceiver;
 
         public bool AutoPilotEnabled => _autoPilotEnabled;
         public bool RecordingEnabled => _recordingEnabled;
+        public PerceptionMode CurrentPerceptionMode => _perceptionMode;
 
         public EntryPoint()
         {
@@ -65,6 +71,7 @@ namespace GTA5AutoPilot
             _debugOverlay = new DebugOverlay();
             _debugCommands = new DebugCommands(this);
             TelemetryExporter = new TelemetryExporter();
+            _visionReceiver = new VisionDataReceiver();
         }
 
         private void OnTick(object sender, EventArgs e)
@@ -82,11 +89,41 @@ namespace GTA5AutoPilot
                 return;
 
             // --- Perception Phase ---
+            // Path navigation always uses game API (visual can't do GPS)
             var pathInfo = PathNavigator.GetNextWaypoint(vehicle);
-            var entities = EntityDetector.ScanSurroundings(vehicle);
-            var trafficLight = TrafficLightDetector.GetCurrentState(vehicle, pathInfo);
+
+            List<EntityInfo> entities;
+            TrafficLightState trafficLight;
+            float laneOffset;
+
+            if (_perceptionMode == PerceptionMode.Vision || _perceptionMode == PerceptionMode.Hybrid)
+            {
+                // Use visual perception from Python pipeline
+                var visionData = _visionReceiver.GetLatestData();
+                if (visionData != null)
+                {
+                    entities = visionData.ToEntityInfoList();
+                    trafficLight = (TrafficLightState)visionData.TrafficLight;
+                    laneOffset = visionData.LaneOffset;
+                }
+                else
+                {
+                    // Fallback to game API if no vision data available
+                    entities = EntityDetector.ScanSurroundings(vehicle);
+                    trafficLight = TrafficLightDetector.GetCurrentState(vehicle, pathInfo);
+                    laneOffset = LaneKeeper.GetSteerCorrection(vehicle, pathInfo);
+                }
+
+                // Game API navigation is always used (path, collision, speed, intersection)
+            }
+            else
+            {
+                entities = EntityDetector.ScanSurroundings(vehicle);
+                trafficLight = TrafficLightDetector.GetCurrentState(vehicle, pathInfo);
+                laneOffset = LaneKeeper.GetSteerCorrection(vehicle, pathInfo);
+            }
+
             var collisionRisk = CollisionPredictor.EvaluateRisk(vehicle, entities);
-            var laneOffset = LaneKeeper.GetSteerCorrection(vehicle, pathInfo);
             var targetSpeed = SpeedGovernor.GetTargetSpeed(vehicle, pathInfo, entities);
             var intersectionInfo = IntersectionHandler.EvaluateIntersection(vehicle, pathInfo);
 
@@ -100,7 +137,8 @@ namespace GTA5AutoPilot
                 CollisionRisk = collisionRisk,
                 LaneOffset = laneOffset,
                 TargetSpeed = targetSpeed,
-                IntersectionInfo = intersectionInfo
+                IntersectionInfo = intersectionInfo,
+                SourceMode = _perceptionMode
             };
 
             var command = DecisionEngine.Evaluate(sensorData);
@@ -181,6 +219,25 @@ namespace GTA5AutoPilot
         {
             _debugOverlay.Enabled = !_debugOverlay.Enabled;
             UI.Notify(_debugOverlay.Enabled ? "~b~Debug overlay ON" : "~b~Debug overlay OFF");
+        }
+
+        public void CyclePerceptionMode()
+        {
+            switch (_perceptionMode)
+            {
+                case PerceptionMode.GameAPI:
+                    _perceptionMode = PerceptionMode.Vision;
+                    UI.Notify("~b~Perception: VISION");
+                    break;
+                case PerceptionMode.Vision:
+                    _perceptionMode = PerceptionMode.Hybrid;
+                    UI.Notify("~b~Perception: HYBRID");
+                    break;
+                case PerceptionMode.Hybrid:
+                    _perceptionMode = PerceptionMode.GameAPI;
+                    UI.Notify("~b~Perception: GAME API");
+                    break;
+            }
         }
     }
 }
