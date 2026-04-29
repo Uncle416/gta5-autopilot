@@ -169,106 +169,101 @@ Frame Tick
 
 ---
 
-## Phase 2：基于视觉的自动驾驶
+## Phase 2：视觉感知 + 规则决策（混合架构，修订版）
 
-### 数据管线
+### 核心理念
+
+**不替代 Phase 1，而是用视觉感知增强它。** 感知从摄像头画面提取，决策和控制复用 Phase 1 的成熟 FSM。
 
 ```
-[GTA V 运行 Phase 1 Mod]
+旧方案: Camera → [端到端神经网络] → steer/throttle/brake  (废弃)
+新方案: Camera → [视觉感知管线] → 检测结果 → [Phase 1 FSM] → 控制
+```
+
+### 为什么新方案更好
+
+| 维度 | 旧方案（端到端） | 新方案（感知+规则） |
+|------|-----------------|-------------------|
+| 数据需求 | 100-500 小时驾驶数据 | 几千张标注截图 |
+| 训练难度 | 学习驾驶策略（极难） | 学习目标检测（成熟技术） |
+| 预训练模型 | 不可用 | YOLO 可直接迁移 |
+| 可解释性 | 黑盒 | 能看到检测到了什么 |
+| 安全兜底 | 需要额外安全层 | Phase 1 FSM 天然兜底 |
+
+### 数据流
+
+```
+GTA V 第三人称画面 (车尾视角)
         │
-        ├──► TCP Protobuf 遥测 ──► Python recorder.py
-        │                              │
-        └──► Shared Memory 帧 ──► Python frame_server.py
-                                       │
-                                       ▼
-                                HDF5 数据集文件
-                                /session_001.h5
-                                ├─ /frames      (N, 3, H, W)
-                                ├─ /speed       (N,)
-                                ├─ /steer       (N,)
-                                ├─ /throttle    (N,)
-                                ├─ /brake       (N,)
-                                └─ /position    (N, 3)
+        ▼
+Python 视觉感知管线 (10-20 FPS)
+        │
+        ├─► Lane Detector (OpenCV Canny+Hough)  → 车道线位置、偏移
+        ├─► Object Detector (YOLOv8 fine-tuned) → 车辆、行人 bbox + 距离估算
+        └─► Traffic Light Classifier (CNN)      → 红/黄/绿/无
+        │
+        ▼
+VisionPerceptionBridge → SensorData 格式
+        │
+        ▼ (TCP JSON)
+C# VisionDataReceiver
+        │
+        ▼
+[Phase 1 DecisionEngine FSM] (已有，不变)
+        │
+        ▼
+[Phase 1 VehicleController] (已有，不变)
 ```
 
-### 模型架构
+### 视觉感知 vs 游戏 API 分工
 
-**基线：PilotNet** (NVIDIA 端到端 CNN)
-- 输入：前置摄像头图像 (200×66)
-- 5 层卷积 + 3 层全连接
-- 输出：steer angle + throttle
+| 感知项 | 来源 | 说明 |
+|--------|------|------|
+| 前方车辆/行人 | 视觉 (YOLO) | 可能比游戏 API 更通用 |
+| 红绿灯状态 | 视觉 (CNN) | 可能比 prop bone 扫描更可靠 |
+| 车道线位置 | 视觉 (OpenCV) | 直接检测，不依赖节点朝向 |
+| 道路导航/路径 | 游戏 API | 视觉无法替代 GPS |
+| 路口检测 | 游戏 API | 视觉不可行 |
+| 距离估算 | 视觉 (bbox 几何) | 精度 ±5m，够用 |
 
-**推荐：ResNet-18 + CIL** (条件模仿学习)
-- ResNet-18 骨干 (ImageNet 预训练，微调)
-- 条件分支：straight / left / right 各有独立输出头
-- 时序：5 帧 → Transformer Encoder → 控制输出
-- 输出：steer、throttle、brake
+### PerceptionMode 切换
 
-### 安全过滤 (Safety Filter)
+按 Numpad6 可循环切换三种感知模式：
+- **GameAPI**：Phase 1 默认，全部用游戏 API
+- **Vision**：实体检测和红绿灯用视觉，导航保留游戏 API
+- **Hybrid**：视觉为主，视觉失败时自动回退到游戏 API
 
-```
-Model 输出
-    │
-    ├─ 碰撞检查：预测的转向/油门是否会导致碰撞？
-    │   └─ 是 → 使用 Phase 1 逻辑覆盖
-    │
-    ├─ 置信度检查：模型输出置信度是否足够？
-    │   └─ 否 → 与 Phase 1 输出加权混合
-    │
-    └─ 物理约束：steer/throttle 是否在物理可行范围内？
-        └─ 否 → 裁剪到安全范围
-```
-
-### 训练流程
-
-1. **数据收集**：用 Phase 1 自动驾驶，录制 50-100 小时
-2. **预处理**：resize 到 200×66，归一化，时序滑窗
-3. **数据增强**：亮度/对比度变化、水平翻转、阴影叠加
-4. **训练**：AdamW, lr=1e-4, CosineAnnealing, early stopping
-5. **评估**：MAE 转向角、干预率（安全过滤触发频率）
+### 训练数据方案
+- 运行 Phase 1 自动驾驶 → 记录截图 + Phase 1 的 SensorData（自动标注）
+- YOLO fine-tune：用 Phase 1 EntityDetector 结果作为 bbox ground truth
+- 红绿灯分类器：用 Phase 1 TrafficLightDetector 结果作为标签
+- 数据量目标：10-20 条路线 × 5 分钟 ≈ 60k-120k 帧
 
 ---
 
 ## 实施步骤
 
-| 步骤 | 内容 | 优先级 |
-|------|------|--------|
-| 1 | 项目脚手架：创建 VS 解决方案 + Python 骨架 + Protobuf schema | P0 |
-| 2 | 车辆控制原语：VehicleController + PathNavigator + LaneKeeper | P0 |
-| 3 | 实体检测：EntityDetector + CollisionPredictor | P0 |
-| 4 | 红绿灯检测：TrafficLightDetector（最大风险项） | P0 |
-| 5 | 路口处理：IntersectionHandler | P0 |
-| 6 | 决策引擎集成：DecisionEngine FSM + SpeedGovernor + DebugOverlay | P0 |
-| 7 | 遥测录制：TelemetryExporter + C++ 屏幕抓取 + Python recorder | P1 |
-| 8 | 感知管线：lane_detector + object_detector + traffic_light_classifier | P1 |
-| 9 | 训练管线：models + dataset + trainer | P1 |
-| 10 | 实时推理：inference_engine + safety_filter + vehicle_commander | P1 |
+| 步骤 | 内容 | 状态 |
+|------|------|------|
+| 1-6 | Phase 1 完整实现 + 代码 review | ✅ 已完成 |
+| 7 | 数据采集管线（collect_dataset.py + 屏幕抓取） | ✅ 代码就绪 |
+| 8 | 视觉感知管线（YOLO + 车道 + 红绿灯） | ✅ 代码就绪 |
+| 9 | YOLO fine-tune + 红绿灯分类器训练 | ⏳ 待运行 |
+| 10 | 端到端测试（视觉感知 → FSM → 控制） | ⏳ 待测试 |
 
 ---
 
 ## 可行性评估
 
-### 可达成的
-- ✅ 高速公路车道跟随 (95%+ 可靠性)
-- ✅ 自适应巡航和基础避障
-- ✅ Phase 1 自动驾驶数据录制
-- ✅ PilotNet 级别端到端转向预测
-
-### 有挑战的
-- ⚠️ 城区红绿灯检测 (70-85%)
-- ⚠️ 复杂城区驾驶（密集车辆/行人）
-- ⚠️ 多车型泛化（不同车的转向比、刹车距离不同）
-
-### 极困难的
-- ❌ 环岛和复杂立交
-- ❌ 雨天+夜间纯视觉驾驶
-- ❌ 训练数据未覆盖区域的泛化
-
-### MVP 建议
-- 3 条预设路线（高速环路、城区环路、混合路线）
-- Phase 1 完整实现并调参
-- Phase 2 数据收集可用，离线训练可跑
-- 安全过滤始终生效
+| 难度 | 事项 |
+|------|------|
+| ✅ | 高速公路车道跟随 |
+| ✅ | 车辆/行人视觉检测（YOLO 开箱即用） |
+| ✅ | 红绿灯视觉识别（可能比 Phase 1 bone 扫描更可靠） |
+| ✅ | 数据采集（Phase 1 自动标注，无需人工） |
+| ⚠️ | 城区车道检测（传统 CV 可能不够） |
+| ⚠️ | 单目距离估算（精度 ±5m） |
+| ❌ | 纯视觉导航/GPS（不可行，保留游戏 API） |
 
 ---
 

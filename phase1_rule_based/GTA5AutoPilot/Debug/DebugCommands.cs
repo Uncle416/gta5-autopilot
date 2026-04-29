@@ -57,6 +57,11 @@ namespace GTA5AutoPilot.Debug
                     e.Handled = true;
                     break;
 
+                case Keys.NumPad6:
+                    _entryPoint.CyclePerceptionMode();
+                    e.Handled = true;
+                    break;
+
                 case Keys.Decimal:
                     // Emergency stop: disengage autopilot
                     if (_entryPoint.AutoPilotEnabled)
