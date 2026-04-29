@@ -31,3 +31,4 @@ phase2_vision/experiments/logs/
 # OS
 .DS_Store
 Thumbs.db
+.claude/
