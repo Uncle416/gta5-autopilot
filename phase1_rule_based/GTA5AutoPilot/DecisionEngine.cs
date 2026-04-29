@@ -20,15 +20,12 @@ namespace GTA5AutoPilot.Modules
     {
         public DecisionState CurrentState { get; private set; } = DecisionState.Cruising;
 
-        private float _stateEnterTime;
         private float _stuckTimer;
         private Vector3 _stuckPosition;
-        private bool _wasStoppedForLight;
         private float _waitStartTime;
 
         // PID for speed control
         private float _speedIntegral;
-        private float _speedPrevError;
 
         public DrivingCommand Evaluate(SensorData data)
         {
@@ -89,14 +86,9 @@ namespace GTA5AutoPilot.Modules
             // --- Turning ---
             if (data.IntersectionInfo.IsAtIntersection && data.IntersectionInfo.TurnRequired)
             {
-                if (data.IntersectionInfo.ShouldYield)
-                {
-                    // Check for cross traffic before proceeding
-                    if (HasCrossTraffic(data))
-                    {
-                        return DrivingCommand.Stop();
-                    }
-                }
+                if (data.IntersectionInfo.ShouldYield && HasCrossTraffic(data))
+                    return DrivingCommand.Stop();
+
                 TransitionTo(DecisionState.Turning);
                 return HandleTurning(data);
             }
@@ -123,7 +115,6 @@ namespace GTA5AutoPilot.Modules
 
             if (currentSpeed < 0.5f)
             {
-                _wasStoppedForLight = true;
                 TransitionTo(DecisionState.WaitingAtLight);
                 _waitStartTime = (float)Time.CurrentTime;
                 return DrivingCommand.Stop();
@@ -191,10 +182,6 @@ namespace GTA5AutoPilot.Modules
 
         private DrivingCommand HandleTurning(SensorData data)
         {
-            var intersectionHandler = EntryPoint.Instance != null
-                ? new IntersectionHandler() // This should use the stored instance
-                : null;
-
             float turnSteer = 0f;
             if (data.IntersectionInfo.TurnDirection == TurnDirection.Left)
                 turnSteer = -0.7f;
@@ -273,7 +260,7 @@ namespace GTA5AutoPilot.Modules
             float speedError = data.TargetSpeed - data.Vehicle.Speed;
 
             // PI controller for speed
-            float dt = 0.016f;
+            float dt = Time.DeltaTime;
             _speedIntegral += speedError * dt;
             _speedIntegral = Math.Max(-3f, Math.Min(3f, _speedIntegral));
 
@@ -287,8 +274,6 @@ namespace GTA5AutoPilot.Modules
                 throttle = 0f;
                 brake = Math.Min(0.5f, Math.Abs(speedError) / 20f);
             }
-
-            _speedPrevError = speedError;
 
             return new DrivingCommand
             {
@@ -330,10 +315,9 @@ namespace GTA5AutoPilot.Modules
 
             // Check if lane change is possible
             // Simplified: check both sides for obstacles
-            var collisionPredictor = new CollisionPredictor();
-            bool leftClear = collisionPredictor.IsLaneChangeSafeLeft(
+            bool leftClear = EntryPoint.Instance?._collisionPredictor?.IsLaneChangeSafeLeft(
                 data.Vehicle, data.NearbyEntities, -data.Vehicle.RightVector);
-            bool rightClear = collisionPredictor.IsLaneChangeSafeRight(
+            bool rightClear = EntryPoint.Instance?._collisionPredictor?.IsLaneChangeSafeRight(
                 data.Vehicle, data.NearbyEntities, data.Vehicle.RightVector);
 
             return leftClear || rightClear;
@@ -385,7 +369,7 @@ namespace GTA5AutoPilot.Modules
 
             if (data.Vehicle.Speed < Configuration.StuckSpeedThreshold)
             {
-                _stuckTimer += 0.016f; // ~60 FPS
+                _stuckTimer += Time.DeltaTime;
 
                 // Check if we've moved
                 if (Vector3.Distance(data.Vehicle.Position, _stuckPosition) > 1f)
@@ -412,12 +396,10 @@ namespace GTA5AutoPilot.Modules
                 return;
 
             CurrentState = newState;
-            _stateEnterTime = (float)Time.CurrentTime;
 
             // Reset state-specific variables
             if (newState == DecisionState.Cruising)
             {
-                _wasStoppedForLight = false;
                 _speedIntegral = 0f;
             }
             else if (newState == DecisionState.Stuck)

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet --version)",
+      "WebSearch",
+      "WebFetch(domain:nativedb.dotindustries.dev)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(ssh -T git@github.com)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}

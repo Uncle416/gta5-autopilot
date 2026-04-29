@@ -21,13 +21,13 @@ namespace GTA5AutoPilot.Modules
             float vehicleHeading = vehicle.Heading;
             float roadHeading = pathInfo.RoadHeading;
 
-            // Compute heading error in range [-PI, PI]
+            // Compute heading error in degrees, normalize to [-180, 180]
             float error = roadHeading - vehicleHeading;
-            while (error > Math.PI) error -= 2f * (float)Math.PI;
-            while (error < -Math.PI) error += 2f * (float)Math.PI;
+            while (error > 180f) error -= 360f;
+            while (error < -180f) error += 360f;
 
             // Normalize to [-1, 1] for steering
-            float normalizedError = Math.Max(-1f, Math.Min(1f, error / (float)Math.PI));
+            float normalizedError = Math.Max(-1f, Math.Min(1f, error / 180f));
 
             // PID computation
             float currentTime = (float)Time.CurrentTime;

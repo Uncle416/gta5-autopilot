@@ -14,9 +14,6 @@ namespace GTA5AutoPilot.Debug
     {
         public bool Enabled { get; set; } = true;
 
-        // For drawing 3D markers
-        private readonly List<MarkerEntry> _markers = new List<MarkerEntry>();
-
         public void Render(SensorData data, DrivingCommand command, DecisionState state)
         {
             if (!Enabled)
@@ -40,7 +37,7 @@ namespace GTA5AutoPilot.Debug
                 $"=== GTA5 AutoPilot ===",
                 $"State: {GetStateColor(state)}{state}~w~",
                 $"Speed: {data.Vehicle.Speed * 3.6f:F0} km/h | Target: {data.TargetSpeed * 3.6f:F0} km/h",
-                $"Steer: {command.Stear:+0.00;-0.00} | Throttle: {command.Throttle:F2} | Brake: {command.Brake:F2}",
+                $"Steer: {command.Steer:+0.00;-0.00} | Throttle: {command.Throttle:F2} | Brake: {command.Brake:F2}",
                 $"Road: {RoadTypeName(data.PathInfo.RoadType)} | Lanes: {data.PathInfo.LaneCount}",
                 $"Intersection: {(data.PathInfo.IsIntersectionAhead ? $"~y~YES ({data.PathInfo.DistanceToIntersection:F0}m)" : "~g~NO")}",
                 $"TrafficLight: {GetLightColor(data.TrafficLightState)}{data.TrafficLightState}",
@@ -151,12 +148,5 @@ namespace GTA5AutoPilot.Debug
             3 => "Gravel",
             _ => "Urban"
         };
-
-        private struct MarkerEntry
-        {
-            public Vector3 Position;
-            public System.Drawing.Color Color;
-            public string Label;
-        }
     }
 }

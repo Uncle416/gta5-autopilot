@@ -11,7 +11,6 @@ namespace GTA5AutoPilot.Modules
     public class SpeedGovernor
     {
         private float _currentTargetSpeed;
-        private float _adaptiveCruiseTarget;
 
         public float GetTargetSpeed(Vehicle egoVehicle, PathInfo pathInfo, List<EntityInfo> entities)
         {
@@ -112,7 +111,6 @@ namespace GTA5AutoPilot.Modules
         public void Reset()
         {
             _currentTargetSpeed = 0f;
-            _adaptiveCruiseTarget = 0f;
         }
 
         private static float Lerp(float a, float b, float t)

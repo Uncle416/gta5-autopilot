@@ -16,7 +16,7 @@ namespace GTA5AutoPilot.NativeWrappers
         public const int TempActionBrakeMax = 24;
         public const int TempActionAccelerate = 27;
         public const int TempActionAccelerateStrong = 28;
-        public const int TempActionReverse = 3;
+        public const int TempActionReverse = 28;
         public const int TempActionForward = 9;
 
         /// <summary>

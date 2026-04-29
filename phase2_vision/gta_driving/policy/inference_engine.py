@@ -12,6 +12,7 @@ from collections import deque
 from pathlib import Path
 from typing import Optional
 
+import cv2
 import numpy as np
 import torch
 import torch.nn as nn
@@ -156,7 +157,6 @@ class InferenceEngine:
         """Preprocess raw image for model input."""
         # Resize to model input size
         # image: (H, W, 3) in BGR (OpenCV) or RGB format
-        import cv2
         h, w = self.config.data.image_height, self.config.data.image_width
         resized = cv2.resize(image, (w, h))
         # Convert to CHW, normalize to [0, 1]

@@ -62,7 +62,11 @@ class GTADrivingDataset(Dataset):
             start = frame_idx
             end = frame_idx + self.sequence_length
 
-            images = f["frames"][start:end].astype(np.float32)
+            images = f["frames"][start:end]
+            if images.dtype == np.uint8:
+                images = images.astype(np.float32) / 255.0
+            else:
+                images = images.astype(np.float32)
             speed = f["speed"][start:end].astype(np.float32)
             steer = f["steer"][start:end].astype(np.float32)
             throttle = f["throttle"][start:end].astype(np.float32)

@@ -10,6 +10,7 @@ Dependencies: ultralytics (pip install ultralytics)
 from typing import Optional
 
 import numpy as np
+import torch
 
 # YOLO is optional import — install with: pip install ultralytics
 try:
@@ -30,6 +31,10 @@ class ObjectDetector:
     def __init__(self, model_path: str = "yolov8n.pt", confidence: float = 0.5,
                  device: str = "cuda"):
         self.confidence = confidence
+
+        if device == "cuda" and not torch.cuda.is_available():
+            device = "cpu"
+            print("[ObjectDetector] CUDA not available, falling back to CPU")
         self.device = device
 
         if HAS_YOLO:

@@ -38,9 +38,10 @@ namespace GTA5AutoPilot.Modules
             if (pathInfo.IsAtIntersection && pathInfo.HasDestination)
             {
                 Vector3 vehiclePos = vehicle.Position;
+                float headingRad = pathInfo.RoadHeading * (float)Math.PI / 180f;
                 Vector3 roadForward = new Vector3(
-                    (float)Math.Cos(pathInfo.RoadHeading),
-                    (float)Math.Sin(pathInfo.RoadHeading),
+                    (float)Math.Cos(headingRad),
+                    (float)Math.Sin(headingRad),
                     0f);
 
                 // Get the "next" node after the intersection to determine turn direction
@@ -57,10 +58,12 @@ namespace GTA5AutoPilot.Modules
                 float nextHeading = outHeading.GetResult<float>();
                 float headingDiff = nextHeading - pathInfo.RoadHeading;
 
-                while (headingDiff > Math.PI) headingDiff -= 2f * (float)Math.PI;
-                while (headingDiff < -Math.PI) headingDiff += 2f * (float)Math.PI;
+                // Normalize to [-180, 180] degrees
+                while (headingDiff > 180f) headingDiff -= 360f;
+                while (headingDiff < -180f) headingDiff += 360f;
 
-                if (Math.Abs(headingDiff) < 0.3f)
+                const float straightThreshold = 15f;
+                if (Math.Abs(headingDiff) < straightThreshold)
                     info.TurnDirection = TurnDirection.Straight;
                 else if (headingDiff > 0)
                     info.TurnDirection = TurnDirection.Left;
@@ -103,7 +106,8 @@ namespace GTA5AutoPilot.Modules
 
             _turnAccumulatedAngle = angleDelta;
 
-            float targetAngle = _pendingTurn == TurnDirection.Left ? (float)Math.PI / 2f : -(float)Math.PI / 2f;
+            // Turn complete when accumulated angle reaches ~90 degrees
+            float targetAngle = _pendingTurn == TurnDirection.Left ? 90f : -90f;
             float remainingAngle = targetAngle - _turnAccumulatedAngle;
 
             // Check if turn is complete
