@@ -78,6 +78,7 @@ namespace GTA5AutoPilot.Modules
             {
                 float entityHeading = entity.Heading;
                 float headingDiff = Math.Abs(entityHeading - egoHeading);
+                if (headingDiff > 180f) headingDiff = 360f - headingDiff;
                 if (headingDiff > 90f && headingDiff < 270f)
                     isOncoming = true;
             }

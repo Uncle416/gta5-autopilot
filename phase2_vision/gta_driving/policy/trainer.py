@@ -173,11 +173,11 @@ class DrivingTrainer:
         with autocast(enabled=self.config.training.use_amp):
             # Forward pass depends on model architecture
             if isinstance(self.model, torch.nn.Module):
-                # ResNet18CIL needs command; others may not
-                try:
+                # Dispatch based on model architecture
+                from .models import ResNet18CIL
+                if isinstance(self.model, ResNet18CIL):
                     pred = self.model(images, command=command, speed=speed)
-                except TypeError:
-                    # Temporal models expect (B,T,C,H,W)
+                else:
                     pred = self.model(images, speed)
 
             loss = self._compute_loss(pred, target)
@@ -211,9 +211,11 @@ class DrivingTrainer:
             command = batch["command"].to(self.device)
             target = batch["target"].to(self.device)
 
-            try:
+            # Dispatch based on model architecture
+            from .models import ResNet18CIL
+            if isinstance(self.model, ResNet18CIL):
                 pred = self.model(images, command=command, speed=speed)
-            except TypeError:
+            else:
                 pred = self.model(images, speed)
 
             loss = self._compute_loss(pred, target)

@@ -108,15 +108,26 @@ class GTAConfig:
     def from_yaml(cls, path: str) -> "GTAConfig":
         """Load config from YAML file."""
         import yaml
+        from dataclasses import fields, is_dataclass
         with open(path, "r") as f:
             data = yaml.safe_load(f)
+
+        # Recursively convert nested dicts to their dataclass types
+        for field_info in fields(cls):
+            name = field_info.name
+            if name in data and isinstance(data[name], dict) and is_dataclass(field_info.type):
+                sub_fields = fields(field_info.type)
+                sub_data = data[name]
+                sub_kwargs = {sf.name: sub_data[sf.name] for sf in sub_fields if sf.name in sub_data}
+                data[name] = field_info.type(**sub_kwargs)
         return cls(**data)
 
     def to_yaml(self, path: str) -> None:
         """Save config to YAML file."""
         import yaml
+        from dataclasses import asdict
         with open(path, "w") as f:
-            yaml.dump(self.__dict__, f, default_flow_style=False)
+            yaml.dump(asdict(self), f, default_flow_style=False)
 
 
 # Default config instance

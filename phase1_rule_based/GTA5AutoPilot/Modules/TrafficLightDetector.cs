@@ -53,10 +53,7 @@ namespace GTA5AutoPilot.Modules
                                vehicle.Speed < 5f;
 
             if (!shouldCheck)
-            {
-                _lastDetectedState = TrafficLightState.None;
-                return TrafficLightState.None;
-            }
+                return _lastDetectedState;
 
             // Scan for traffic light props ahead of the vehicle
             Prop[] nearbyProps = World.GetNearbyProps(
@@ -110,11 +107,7 @@ namespace GTA5AutoPilot.Modules
 
         private bool IsTrafficLightModel(int modelHash)
         {
-            foreach (int hash in TrafficLightModels)
-            {
-                if (hash == modelHash) return true;
-            }
-            return false;
+            return NativeWrappers.TrafficLightUtils.IsTrafficLightModel(modelHash);
         }
 
         private TrafficLightState AnalyzeLightBones(Prop lightProp)
@@ -194,22 +187,22 @@ namespace GTA5AutoPilot.Modules
         /// <summary>
         /// Fallback detection: try to detect light state by checking
         /// which sub-component of the traffic light prop is visible/active.
-        /// This is heuristic and version-dependent.
+        /// Returns None when uncertain (caller falls back to treating as stop sign).
         /// </summary>
         private TrafficLightState DetectByColorSampling(Prop lightProp)
         {
-            // In many GTA V traffic light models, the light state is determined
-            // by which bulb mesh is currently visible. Check each bulb bone's
-            // visibility/scale as a proxy for state.
+            // Check all bulb colors and use bone offset as a heuristic
+            bool redExists = false, greenExists = false;
+            float redDist = 0f, greenDist = 0f;
 
-            // Check red bulbs
             foreach (string name in RedBoneNames)
             {
                 int idx = lightProp.GetBoneIndex(name);
                 if (idx != -1)
                 {
-                    // If bone exists, it might be visible (lit)
-                    return TrafficLightState.Red;
+                    redExists = true;
+                    redDist = Vector3.Distance(lightProp.GetBoneCoord(idx), lightProp.Position);
+                    break;
                 }
             }
 
@@ -218,8 +211,18 @@ namespace GTA5AutoPilot.Modules
                 int idx = lightProp.GetBoneIndex(name);
                 if (idx != -1)
                 {
-                    return TrafficLightState.Green;
+                    greenExists = true;
+                    greenDist = Vector3.Distance(lightProp.GetBoneCoord(idx), lightProp.Position);
+                    break;
                 }
+            }
+
+            // Both colors exist: compare distances to guess which is active
+            if (redExists && greenExists)
+            {
+                if (redDist > greenDist * 1.1f) return TrafficLightState.Red;
+                if (greenDist > redDist * 1.1f) return TrafficLightState.Green;
+                return TrafficLightState.Red; // Default conservative
             }
 
             return TrafficLightState.None;

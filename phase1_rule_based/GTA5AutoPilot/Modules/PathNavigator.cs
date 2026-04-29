@@ -1,13 +1,13 @@
 using System;
-using System.Collections.Generic;
 using GTA;
 using GTA.Math;
+using GTA5AutoPilot.NativeWrappers;
 
 namespace GTA5AutoPilot.Modules
 {
     /// <summary>
-    /// Road node-based navigation. Uses GTA V's vehicle node graph to find
-    /// and follow waypoints along roads toward a destination.
+    /// Road node-based navigation using GTA V's vehicle node graph.
+    /// Uses PathfindingUtils for all native calls.
     /// </summary>
     public class PathNavigator
     {
@@ -15,6 +15,11 @@ namespace GTA5AutoPilot.Modules
         private Vector3 _currentWaypoint;
         private float _currentHeading;
         private int _consecutiveFailures;
+
+        // Cached values to reduce native calls
+        private Vector3 _lastRoadQueryPos;
+        private int _cachedLaneCount = 2;
+        private int _cachedRoadType;
 
         public bool HasDestination { get; private set; }
 
@@ -27,8 +32,8 @@ namespace GTA5AutoPilot.Modules
         public void Reset(Vehicle vehicle)
         {
             _consecutiveFailures = 0;
-            // Initialize waypoint to current position
             _currentWaypoint = vehicle.Position;
+            _lastRoadQueryPos = Vector3.Zero;
         }
 
         public PathInfo GetNextWaypoint(Vehicle vehicle)
@@ -38,24 +43,12 @@ namespace GTA5AutoPilot.Modules
 
             try
             {
-                // Get the closest road node with heading
-                OutputArgument outPos = new OutputArgument();
-                OutputArgument outHeading = new OutputArgument();
-
-                Function.Call(Hash.GET_NTH_CLOSEST_VEHICLE_NODE_WITH_HEADING,
-                    pos.X, pos.Y, pos.Z,
-                    1, // 1st closest (0-based would be the one we're on, 1 is ahead)
-                    outPos, outHeading,
-                    1, // nodeType: 1 = any road
-                    0f, 0f);
-
-                Vector3 nodePos = outPos.GetResult<Vector3>();
-                float nodeHeading = outHeading.GetResult<float>();
+                // Get closest road node with heading
+                var (nodePos, nodeHeading) = PathfindingUtils.GetClosestNodeWithHeading(pos, 1);
 
                 if (nodePos == Vector3.Zero)
                 {
                     _consecutiveFailures++;
-                    // Fallback: use vehicle forward projection
                     nodePos = pos + vehicle.ForwardVector * Configuration.WaypointLookAheadDistance;
                     nodeHeading = vehicle.Heading;
                 }
@@ -64,23 +57,12 @@ namespace GTA5AutoPilot.Modules
                     _consecutiveFailures = 0;
                 }
 
-                // If we have a destination, try to get navigation direction
+                // Navigation direction toward destination
                 if (HasDestination && _destination != Vector3.Zero)
                 {
-                    OutputArgument outDir = new OutputArgument();
-                    OutputArgument outP5 = new OutputArgument();
-                    OutputArgument outP6 = new OutputArgument();
-
-                    Function.Call(Hash.GENERATE_DIRECTIONS_TO_COORD,
-                        _destination.X, _destination.Y, _destination.Z,
-                        true, outDir, outP5, outP6);
-
-                    Vector3 navDir = outDir.GetResult<Vector3>();
+                    Vector3 navDir = PathfindingUtils.GetDirectionToCoord(pos, _destination);
                     if (navDir != Vector3.Zero)
-                    {
-                        // Blend node heading with nav direction
                         nodePos = pos + navDir * Configuration.WaypointLookAheadDistance;
-                    }
 
                     info.DistanceToDestination = Vector3.Distance(pos, _destination);
                 }
@@ -88,93 +70,43 @@ namespace GTA5AutoPilot.Modules
                 _currentWaypoint = nodePos;
                 _currentHeading = nodeHeading;
 
-                // Get node properties for intersection detection
-                OutputArgument outDensity = new OutputArgument();
-                OutputArgument outFlags = new OutputArgument();
+                // Cache road properties (only re-query when moved > 5m)
+                if (Vector3.Distance(pos, _lastRoadQueryPos) > 5f)
+                {
+                    var (_, flags) = PathfindingUtils.GetNodeProperties(nodePos);
+                    _cachedRoadType = (flags & 2) != 0 ? 1 : 0;
+                    if ((flags & 4) != 0) _cachedRoadType = 2;
+                    if ((flags & 8) != 0) _cachedRoadType = 3;
+                    _cachedLaneCount = Math.Max(1, PathfindingUtils.GetRoadLaneCount(pos).forwardBackward);
+                    _lastRoadQueryPos = pos;
+                }
 
-                Function.Call(Hash.GET_VEHICLE_NODE_PROPERTIES,
-                    nodePos.X, nodePos.Y, nodePos.Z,
-                    outDensity, outFlags);
+                info.IsAtIntersection = PathfindingUtils.IsIntersectionNode(nodePos);
+                info.RoadType = _cachedRoadType;
+                info.LaneCount = _cachedLaneCount;
 
-                int flags = outFlags.GetResult<int>();
-                info.IsAtIntersection = (flags & 1) != 0;     // bit 0: intersection
-                info.RoadType = (flags & 2) != 0 ? 1 : 0;     // bit 1: highway
-                if ((flags & 4) != 0) info.RoadType = 2;      // bit 2: alley
-                if ((flags & 8) != 0) info.RoadType = 3;      // bit 3: gravel
-
-                // Look ahead for intersections
+                // Look ahead for intersection
                 Vector3 aheadPos = pos + vehicle.ForwardVector * Configuration.IntersectionDetectionDistance;
-                OutputArgument aheadDensity = new OutputArgument();
-                OutputArgument aheadFlags = new OutputArgument();
-
-                Function.Call(Hash.GET_VEHICLE_NODE_PROPERTIES,
-                    aheadPos.X, aheadPos.Y, aheadPos.Z,
-                    aheadDensity, aheadFlags);
-
-                int aheadFlagsVal = aheadFlags.GetResult<int>();
-                info.IsIntersectionAhead = (aheadFlagsVal & 1) != 0;
+                info.IsIntersectionAhead = PathfindingUtils.IsIntersectionNode(aheadPos);
 
                 if (info.IsIntersectionAhead)
                 {
-                    Vector3 intersectionPos = GetNearestIntersectionNode(pos, vehicle.ForwardVector);
+                    var intersectionPos = PathfindingUtils.GetClosestNodeWithHeading(aheadPos, 1).Item1;
                     info.DistanceToIntersection = Vector3.Distance(pos, intersectionPos);
                 }
 
-                // Get lane count
-                int lanesForward = GetLaneCount(pos);
-                info.LaneCount = Math.Max(1, lanesForward);
-
-                info.Waypoint = _currentWaypoint;
-                info.RoadHeading = _currentHeading;
+                info.Waypoint = nodePos;
+                info.RoadHeading = nodeHeading;
                 info.HasDestination = HasDestination;
             }
             catch (Exception)
             {
-                // Extreme fallback: project forward
                 info.Waypoint = pos + vehicle.ForwardVector * Configuration.WaypointLookAheadDistance;
                 info.RoadHeading = vehicle.Heading;
                 info.LaneCount = 2;
             }
 
             return info;
-        }
-
-        private Vector3 GetNearestIntersectionNode(Vector3 position, Vector3 forward)
-        {
-            // Scan ahead for intersection nodes
-            Vector3 scanPos = position;
-            for (int i = 0; i < 10; i++)
-            {
-                scanPos += forward * 5f;
-                OutputArgument outDensity = new OutputArgument();
-                OutputArgument outFlags = new OutputArgument();
-
-                Function.Call(Hash.GET_VEHICLE_NODE_PROPERTIES,
-                    scanPos.X, scanPos.Y, scanPos.Z,
-                    outDensity, outFlags);
-
-                if ((outFlags.GetResult<int>() & 1) != 0)
-                    return scanPos;
-            }
-            return position + forward * Configuration.IntersectionDetectionDistance;
-        }
-
-        private int GetLaneCount(Vector3 position)
-        {
-            OutputArgument corner1 = new OutputArgument();
-            OutputArgument corner2 = new OutputArgument();
-            OutputArgument corner3 = new OutputArgument();
-            OutputArgument corner4 = new OutputArgument();
-            OutputArgument lanesFB = new OutputArgument();
-            OutputArgument lanesLR = new OutputArgument();
-
-            Function.Call(Hash.GET_CLOSEST_ROAD,
-                position.X, position.Y, position.Z,
-                1f, 1,
-                corner1, corner2, corner3, corner4,
-                lanesFB, lanesLR);
-
-            return lanesFB.GetResult<int>();
         }
     }
 }

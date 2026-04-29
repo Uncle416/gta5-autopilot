@@ -15,17 +15,17 @@ namespace GTA5AutoPilot
     {
         public static EntryPoint Instance { get; private set; }
 
-        // Core modules
-        private VehicleController _vehicleController;
-        private PathNavigator _pathNavigator;
-        private EntityDetector _entityDetector;
-        private CollisionPredictor _collisionPredictor;
-        private LaneKeeper _laneKeeper;
-        private SpeedGovernor _speedGovernor;
-        private TrafficLightDetector _trafficLightDetector;
-        private IntersectionHandler _intersectionHandler;
-        private DecisionEngine _decisionEngine;
-        private TelemetryExporter _telemetryExporter;
+        // Core modules (public for cross-module access)
+        public VehicleController VehicleController { get; private set; }
+        public PathNavigator PathNavigator { get; private set; }
+        public EntityDetector EntityDetector { get; private set; }
+        public CollisionPredictor CollisionPredictor { get; private set; }
+        public LaneKeeper LaneKeeper { get; private set; }
+        public SpeedGovernor SpeedGovernor { get; private set; }
+        public TrafficLightDetector TrafficLightDetector { get; private set; }
+        public IntersectionHandler IntersectionHandler { get; private set; }
+        public DecisionEngine DecisionEngine { get; private set; }
+        public TelemetryExporter TelemetryExporter { get; private set; }
 
         // Debug
         private DebugOverlay _debugOverlay;
@@ -52,19 +52,19 @@ namespace GTA5AutoPilot
 
         private void InitializeModules()
         {
-            _vehicleController = new VehicleController();
-            _pathNavigator = new PathNavigator();
-            _entityDetector = new EntityDetector();
-            _collisionPredictor = new CollisionPredictor();
-            _laneKeeper = new LaneKeeper();
-            _speedGovernor = new SpeedGovernor();
-            _trafficLightDetector = new TrafficLightDetector();
-            _intersectionHandler = new IntersectionHandler();
-            _decisionEngine = new DecisionEngine();
+            VehicleController = new VehicleController();
+            PathNavigator = new PathNavigator();
+            EntityDetector = new EntityDetector();
+            CollisionPredictor = new CollisionPredictor();
+            LaneKeeper = new LaneKeeper();
+            SpeedGovernor = new SpeedGovernor();
+            TrafficLightDetector = new TrafficLightDetector();
+            IntersectionHandler = new IntersectionHandler();
+            DecisionEngine = new DecisionEngine();
 
             _debugOverlay = new DebugOverlay();
             _debugCommands = new DebugCommands(this);
-            _telemetryExporter = new TelemetryExporter();
+            TelemetryExporter = new TelemetryExporter();
         }
 
         private void OnTick(object sender, EventArgs e)
@@ -82,13 +82,13 @@ namespace GTA5AutoPilot
                 return;
 
             // --- Perception Phase ---
-            var pathInfo = _pathNavigator.GetNextWaypoint(vehicle);
-            var entities = _entityDetector.ScanSurroundings(vehicle);
-            var trafficLight = _trafficLightDetector.GetCurrentState(vehicle, pathInfo);
-            var collisionRisk = _collisionPredictor.EvaluateRisk(vehicle, entities);
-            var laneOffset = _laneKeeper.GetSteerCorrection(vehicle, pathInfo);
-            var targetSpeed = _speedGovernor.GetTargetSpeed(vehicle, pathInfo, entities);
-            var intersectionInfo = _intersectionHandler.EvaluateIntersection(vehicle, pathInfo);
+            var pathInfo = PathNavigator.GetNextWaypoint(vehicle);
+            var entities = EntityDetector.ScanSurroundings(vehicle);
+            var trafficLight = TrafficLightDetector.GetCurrentState(vehicle, pathInfo);
+            var collisionRisk = CollisionPredictor.EvaluateRisk(vehicle, entities);
+            var laneOffset = LaneKeeper.GetSteerCorrection(vehicle, pathInfo);
+            var targetSpeed = SpeedGovernor.GetTargetSpeed(vehicle, pathInfo, entities);
+            var intersectionInfo = IntersectionHandler.EvaluateIntersection(vehicle, pathInfo);
 
             // --- Decision Phase ---
             var sensorData = new SensorData
@@ -103,19 +103,19 @@ namespace GTA5AutoPilot
                 IntersectionInfo = intersectionInfo
             };
 
-            var command = _decisionEngine.Evaluate(sensorData);
+            var command = DecisionEngine.Evaluate(sensorData);
 
             // --- Execution Phase ---
-            _vehicleController.Execute(vehicle, command);
+            VehicleController.Execute(vehicle, command);
 
             // --- Telemetry ---
             if (_recordingEnabled)
             {
-                _telemetryExporter.Send(sensorData, command);
+                TelemetryExporter.Send(sensorData, command);
             }
 
             // --- Debug ---
-            _debugOverlay.Render(sensorData, command, _decisionEngine.CurrentState);
+            _debugOverlay.Render(sensorData, command, DecisionEngine.CurrentState);
         }
 
         private void OnKeyDown(object sender, KeyEventArgs e)
@@ -140,12 +140,12 @@ namespace GTA5AutoPilot
                 var vehicle = player.Character.CurrentVehicle;
                 if (vehicle != null && vehicle.Exists())
                 {
-                    _pathNavigator.Reset(vehicle);
+                    PathNavigator.Reset(vehicle);
                 }
             }
             else
             {
-                _vehicleController.Release();
+                VehicleController.Release();
             }
 
             UI.Notify(_autoPilotEnabled ? "~g~AutoPilot ON" : "~r~AutoPilot OFF");
@@ -157,11 +157,11 @@ namespace GTA5AutoPilot
 
             if (_recordingEnabled)
             {
-                _telemetryExporter.StartRecording();
+                TelemetryExporter.StartRecording();
             }
             else
             {
-                _telemetryExporter.StopRecording();
+                TelemetryExporter.StopRecording();
             }
 
             UI.Notify(_recordingEnabled ? "~y~Recording ON" : "~y~Recording OFF");
@@ -172,7 +172,7 @@ namespace GTA5AutoPilot
             var waypoint = World.WaypointPosition;
             if (waypoint != Vector3.Zero)
             {
-                _pathNavigator.SetDestination(waypoint);
+                PathNavigator.SetDestination(waypoint);
                 UI.Notify("~b~Destination set to map waypoint");
             }
         }

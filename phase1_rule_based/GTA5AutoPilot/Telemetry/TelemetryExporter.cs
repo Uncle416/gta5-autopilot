@@ -126,7 +126,7 @@ namespace GTA5AutoPilot.Telemetry
                 bw.Write(pos.Z);
 
                 // Control command (ground truth for training)
-                bw.Write(command.Stear);
+                bw.Write(command.Steer);
                 bw.Write(command.Throttle);
                 bw.Write(command.Brake);
                 bw.Write(command.TargetSpeed);
