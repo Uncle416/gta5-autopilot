@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>8.0</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <OutputType>Library</OutputType>
+    <AssemblyName>GTA5AutoPilot</AssemblyName>
+    <RootNamespace>GTA5AutoPilot</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="ScriptHookVDotNet3">
+      <HintPath>..\deps\ScriptHookVDotNet3.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="LemonUI">
+      <HintPath>..\deps\LemonUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.25.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+</Project>
