@@ -1,99 +1,23 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Net.Sockets;
-using Newtonsoft.Json;
 using GTA;
 
 namespace GTA5AutoPilot.Telemetry
 {
     /// <summary>
-    /// Receives visual perception data from the Python pipeline.
-    /// Listens on a local TCP port for JSON-encoded VisionPerceptionResult packets.
+    /// Stub receiver for Phase 1 testing. Will be replaced with TCP+JSON
+    /// receiver when Phase 2 vision pipeline is running.
     /// </summary>
     public class VisionDataReceiver
     {
-        private TcpListener _listener;
-        private VisionData _latestData;
-        private readonly object _dataLock = new object();
+        public VisionDataReceiver() { }
 
-        private const int Port = 21557;
-
-        public VisionDataReceiver()
-        {
-            StartListening();
-        }
-
-        private void StartListening()
-        {
-            try
-            {
-                _listener = new TcpListener(System.Net.IPAddress.Loopback, Port);
-                _listener.Start();
-                _listener.BeginAcceptTcpClient(OnClientConnected, null);
-            }
-            catch (Exception)
-            {
-                // Port may be in use — vision perception will use game API fallback
-            }
-        }
-
-        private void OnClientConnected(IAsyncResult ar)
-        {
-            try
-            {
-                var client = _listener.EndAcceptTcpClient(ar);
-                // Handle this client and start accepting next
-                _listener.BeginAcceptTcpClient(OnClientConnected, null);
-                ReadFromClient(client);
-            }
-            catch { }
-        }
-
-        private void ReadFromClient(TcpClient client)
-        {
-            try
-            {
-                using (var stream = client.GetStream())
-                using (var reader = new StreamReader(stream))
-                {
-                    string json = reader.ReadToEnd();
-                    if (!string.IsNullOrEmpty(json))
-                    {
-                        var data = JsonConvert.DeserializeObject<VisionData>(json);
-                        if (data != null)
-                        {
-                            lock (_dataLock)
-                            {
-                                _latestData = data;
-                            }
-                        }
-                    }
-                }
-            }
-            catch { }
-            finally
-            {
-                client?.Close();
-            }
-        }
-
-        /// <summary>
-        /// Get the latest visual perception data (thread-safe).
-        /// Returns null if no data received yet.
-        /// </summary>
         public VisionData GetLatestData()
         {
-            lock (_dataLock)
-            {
-                return _latestData;
-            }
+            return null; // Always triggers game API fallback in Phase 1
         }
 
-        public void Stop()
-        {
-            try { _listener?.Stop(); } catch { }
-        }
+        public void Stop() { }
     }
 
     /// <summary>

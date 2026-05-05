@@ -1,6 +1,7 @@
 using System;
 using GTA;
 using GTA.Math;
+using GTA.Native;
 
 namespace GTA5AutoPilot.Modules
 {
@@ -27,10 +28,10 @@ namespace GTA5AutoPilot.Modules
             while (error < -180f) error += 360f;
 
             // Normalize to [-1, 1] for steering
-            float normalizedError = Math.Max(-1f, Math.Min(1f, error / 180f));
+            float normalizedError = System.Math.Max(-1f, System.Math.Min(1f, error / 180f));
 
             // PID computation
-            float currentTime = (float)Time.CurrentTime;
+            float currentTime = (float)Game.GameTime / 1000f;
             float dt = currentTime - _previousTime;
             if (dt <= 0f || dt > 0.1f) dt = 0.016f; // Assume ~60 FPS for first frame
 
@@ -40,8 +41,8 @@ namespace GTA5AutoPilot.Modules
                              + Configuration.LaneKeepDGain * derivative;
 
             // Clamp
-            correction = Math.Max(-Configuration.MaxLaneSteerCorrection,
-                         Math.Min(Configuration.MaxLaneSteerCorrection, correction));
+            correction = System.Math.Max(-Configuration.MaxLaneSteerCorrection,
+                         System.Math.Min(Configuration.MaxLaneSteerCorrection, correction));
 
             _previousError = normalizedError;
             _previousTime = currentTime;

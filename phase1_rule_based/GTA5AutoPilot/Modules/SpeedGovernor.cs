@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using GTA;
 using GTA.Math;
+using GTA.Native;
 
 namespace GTA5AutoPilot.Modules
 {
@@ -37,7 +38,7 @@ namespace GTA5AutoPilot.Modules
             float intersectionFactor = 1f;
             if (pathInfo.IsIntersectionAhead && pathInfo.DistanceToIntersection < Configuration.IntersectionSlowDistance)
             {
-                intersectionFactor = Math.Max(0.2f,
+                intersectionFactor = System.Math.Max(0.2f,
                     pathInfo.DistanceToIntersection / Configuration.IntersectionSlowDistance);
             }
 
@@ -59,7 +60,7 @@ namespace GTA5AutoPilot.Modules
                 {
                     // Need to slow down
                     float ratio = leadVehicle.Distance / safeDistance;
-                    adaptiveSpeed = Math.Max(leadVehicle.Speed, egoVehicle.Speed * ratio);
+                    adaptiveSpeed = System.Math.Max(leadVehicle.Speed, egoVehicle.Speed * ratio);
                 }
                 else if (leadVehicle.Distance < safeDistance * 1.5f)
                 {
@@ -69,8 +70,8 @@ namespace GTA5AutoPilot.Modules
             }
 
             // 4. Smooth transition
-            float targetSpeed = Math.Min(adaptiveSpeed, baseSpeed) * intersectionFactor;
-            targetSpeed = Math.Max(2f, targetSpeed); // Don't go below 2 m/s unless stopping
+            float targetSpeed = System.Math.Min(adaptiveSpeed, baseSpeed) * intersectionFactor;
+            targetSpeed = System.Math.Max(2f, targetSpeed); // Don't go below 2 m/s unless stopping
 
             // Smooth changes
             _currentTargetSpeed = Lerp(_currentTargetSpeed, targetSpeed, 0.1f);

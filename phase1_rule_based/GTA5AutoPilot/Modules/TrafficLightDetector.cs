@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using GTA;
 using GTA.Math;
+using GTA.Native;
 
 namespace GTA5AutoPilot.Modules
 {
@@ -122,10 +123,10 @@ namespace GTA5AutoPilot.Modules
 
             foreach (string boneName in RedBoneNames)
             {
-                int boneIndex = lightProp.GetBoneIndex(boneName);
+                int boneIndex = Function.Call<int>(Hash.GET_ENTITY_BONE_INDEX_BY_NAME, lightProp,boneName);
                 if (boneIndex != -1)
                 {
-                    Vector3 bonePos = lightProp.GetBoneCoord(boneIndex);
+                    Vector3 bonePos = Function.Call<GTA.Math.Vector3>(Hash.GET_WORLD_POSITION_OF_ENTITY_BONE, lightProp,boneIndex);
                     // Check if bone is "active" (lit) by comparing to parent position
                     Vector3 propPos = lightProp.Position;
                     float boneOffset = Vector3.Distance(bonePos, propPos);
@@ -137,10 +138,10 @@ namespace GTA5AutoPilot.Modules
 
             foreach (string boneName in GreenBoneNames)
             {
-                int boneIndex = lightProp.GetBoneIndex(boneName);
+                int boneIndex = Function.Call<int>(Hash.GET_ENTITY_BONE_INDEX_BY_NAME, lightProp,boneName);
                 if (boneIndex != -1)
                 {
-                    Vector3 bonePos = lightProp.GetBoneCoord(boneIndex);
+                    Vector3 bonePos = Function.Call<GTA.Math.Vector3>(Hash.GET_WORLD_POSITION_OF_ENTITY_BONE, lightProp,boneIndex);
                     Vector3 propPos = lightProp.Position;
                     if (Vector3.Distance(bonePos, propPos) > 0.05f)
                         greenLit = true;
@@ -150,10 +151,10 @@ namespace GTA5AutoPilot.Modules
 
             foreach (string boneName in AmberBoneNames)
             {
-                int boneIndex = lightProp.GetBoneIndex(boneName);
+                int boneIndex = Function.Call<int>(Hash.GET_ENTITY_BONE_INDEX_BY_NAME, lightProp,boneName);
                 if (boneIndex != -1)
                 {
-                    Vector3 bonePos = lightProp.GetBoneCoord(boneIndex);
+                    Vector3 bonePos = Function.Call<GTA.Math.Vector3>(Hash.GET_WORLD_POSITION_OF_ENTITY_BONE, lightProp,boneIndex);
                     Vector3 propPos = lightProp.Position;
                     if (Vector3.Distance(bonePos, propPos) > 0.05f)
                         amberLit = true;
@@ -197,22 +198,22 @@ namespace GTA5AutoPilot.Modules
 
             foreach (string name in RedBoneNames)
             {
-                int idx = lightProp.GetBoneIndex(name);
+                int idx = Function.Call<int>(Hash.GET_ENTITY_BONE_INDEX_BY_NAME, lightProp,name);
                 if (idx != -1)
                 {
                     redExists = true;
-                    redDist = Vector3.Distance(lightProp.GetBoneCoord(idx), lightProp.Position);
+                    redDist = Vector3.Distance(Function.Call<GTA.Math.Vector3>(Hash.GET_WORLD_POSITION_OF_ENTITY_BONE, lightProp,idx), lightProp.Position);
                     break;
                 }
             }
 
             foreach (string name in GreenBoneNames)
             {
-                int idx = lightProp.GetBoneIndex(name);
+                int idx = Function.Call<int>(Hash.GET_ENTITY_BONE_INDEX_BY_NAME, lightProp,name);
                 if (idx != -1)
                 {
                     greenExists = true;
-                    greenDist = Vector3.Distance(lightProp.GetBoneCoord(idx), lightProp.Position);
+                    greenDist = Vector3.Distance(Function.Call<GTA.Math.Vector3>(Hash.GET_WORLD_POSITION_OF_ENTITY_BONE, lightProp,idx), lightProp.Position);
                     break;
                 }
             }

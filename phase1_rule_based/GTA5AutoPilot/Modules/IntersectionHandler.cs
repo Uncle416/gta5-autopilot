@@ -1,6 +1,7 @@
 using System;
 using GTA;
 using GTA.Math;
+using GTA.Native;
 
 namespace GTA5AutoPilot.Modules
 {

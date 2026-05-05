@@ -1,4 +1,5 @@
 using GTA;
+using GTA.Native;
 
 namespace GTA5AutoPilot.NativeWrappers
 {
@@ -80,8 +81,8 @@ namespace GTA5AutoPilot.NativeWrappers
             if (!HasDriver(vehicle))
                 return null;
 
-            return new Ped(Function.Call<int>(Hash.GET_PED_IN_VEHICLE_SEAT,
-                vehicle, (int)VehicleSeat.Driver));
+            return Function.Call<Ped>(Hash.GET_PED_IN_VEHICLE_SEAT,
+                vehicle, (int)VehicleSeat.Driver);
         }
 
         /// <summary>

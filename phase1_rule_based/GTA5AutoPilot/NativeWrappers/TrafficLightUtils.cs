@@ -1,5 +1,6 @@
 using GTA;
 using GTA.Math;
+using GTA.Native;
 
 namespace GTA5AutoPilot.NativeWrappers
 {
@@ -13,17 +14,13 @@ namespace GTA5AutoPilot.NativeWrappers
         /// </summary>
         public static void DisableAllTrafficLights()
         {
-            Function.Call(Hash.SET_TRAFFIC_LIGHTS, false);
+            // Not directly supported in this SHVDN version; traffic lights
+            // are detected via nearby prop scanning instead.
         }
 
-        /// <summary>
-        /// Set a specific traffic light state at a position.
-        /// Note: This native is unreliable across GTA V versions.
-        /// </summary>
         public static void SetTrafficLightState(Vector3 position, int state)
         {
-            // state: 0=green, 1=red, 2=yellow
-            Function.Call(Hash.SET_TRAFFIC_LIGHTS_STATE, position.X, position.Y, position.Z, state);
+            // Not directly supported in this SHVDN version.
         }
 
         /// <summary>
@@ -57,11 +54,11 @@ namespace GTA5AutoPilot.NativeWrappers
         /// </summary>
         public static bool IsBoneActive(Entity entity, string boneName)
         {
-            int boneIndex = entity.GetBoneIndex(boneName);
+            int boneIndex = Function.Call<int>(Hash.GET_ENTITY_BONE_INDEX_BY_NAME, entity, boneName);
             if (boneIndex == -1)
                 return false;
 
-            Vector3 bonePos = entity.GetBoneCoord(boneIndex);
+            Vector3 bonePos = Function.Call<Vector3>(Hash.GET_WORLD_POSITION_OF_ENTITY_BONE, entity, boneIndex);
             Vector3 entityPos = entity.Position;
 
             // If bone position differs significantly from entity origin, it's active

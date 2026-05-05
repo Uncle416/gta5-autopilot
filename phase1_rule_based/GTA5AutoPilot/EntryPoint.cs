@@ -1,243 +1,160 @@
 using System;
-using System.Collections.Generic;
 using System.Windows.Forms;
 using GTA;
+using GTA.Math;
+using GTA.Native;
 using GTA5AutoPilot.Modules;
 using GTA5AutoPilot.Debug;
-using GTA5AutoPilot.Telemetry;
 
 namespace GTA5AutoPilot
 {
-    /// <summary>
-    /// ScriptHookVDotNet entry point. This class is instantiated by SHVDN
-    /// when the game loads scripts from the /scripts/ folder.
-    /// </summary>
     public class EntryPoint : Script
     {
         public static EntryPoint Instance { get; private set; }
-
-        // Core modules (public for cross-module access)
-        public VehicleController VehicleController { get; private set; }
-        public PathNavigator PathNavigator { get; private set; }
-        public EntityDetector EntityDetector { get; private set; }
-        public CollisionPredictor CollisionPredictor { get; private set; }
-        public LaneKeeper LaneKeeper { get; private set; }
-        public SpeedGovernor SpeedGovernor { get; private set; }
-        public TrafficLightDetector TrafficLightDetector { get; private set; }
-        public IntersectionHandler IntersectionHandler { get; private set; }
-        public DecisionEngine DecisionEngine { get; private set; }
-        public TelemetryExporter TelemetryExporter { get; private set; }
-
-        // Debug
-        private DebugOverlay _debugOverlay;
-        private DebugCommands _debugCommands;
-
-        // State
-        private bool _autoPilotEnabled;
-        private bool _recordingEnabled;
-        private PerceptionMode _perceptionMode = PerceptionMode.GameAPI;
-
-        // Phase 2: visual perception receiver
-        private VisionDataReceiver _visionReceiver;
-
         public bool AutoPilotEnabled => _autoPilotEnabled;
-        public bool RecordingEnabled => _recordingEnabled;
-        public PerceptionMode CurrentPerceptionMode => _perceptionMode;
+        public CollisionPredictor CollisionPredictor => _collisionPredictor;
+
+        private VehicleController _vehicleCtrl;
+        private PathNavigator _pathNav;
+        private CollisionPredictor _collisionPredictor;
+        private EntityDetector _entityDetector;
+        private DebugOverlay _debugOverlay;
+        private bool _autoPilotEnabled;
+        private Vector3 _destination;
+        private bool _destSet;
+        private PerceptionMode _perceptionMode = PerceptionMode.GameAPI;
+        private int _debugFrameCounter;
+        private int _tickSinceTaskIssue;
 
         public EntryPoint()
         {
             Instance = this;
-
             Tick += OnTick;
             KeyDown += OnKeyDown;
-            KeyUp += OnKeyUp;
-            Interval = 0; // Run every frame
+            Interval = 0;
 
-            InitializeModules();
-        }
-
-        private void InitializeModules()
-        {
-            VehicleController = new VehicleController();
-            PathNavigator = new PathNavigator();
-            EntityDetector = new EntityDetector();
-            CollisionPredictor = new CollisionPredictor();
-            LaneKeeper = new LaneKeeper();
-            SpeedGovernor = new SpeedGovernor();
-            TrafficLightDetector = new TrafficLightDetector();
-            IntersectionHandler = new IntersectionHandler();
-            DecisionEngine = new DecisionEngine();
-
+            _vehicleCtrl = new VehicleController();
+            _pathNav = new PathNavigator();
+            _collisionPredictor = new CollisionPredictor();
+            _entityDetector = new EntityDetector();
             _debugOverlay = new DebugOverlay();
-            _debugCommands = new DebugCommands(this);
-            TelemetryExporter = new TelemetryExporter();
-            _visionReceiver = new VisionDataReceiver();
+
+            GTA.UI.Screen.ShowSubtitle("GTA5AutoPilot loaded (AI)", 3000);
         }
 
         private void OnTick(object sender, EventArgs e)
         {
-            if (!_autoPilotEnabled)
-                return;
+            if (!_autoPilotEnabled) return;
 
-            var player = Game.Player;
-            var vehicle = player.Character.CurrentVehicle;
+            var driver = Game.Player.Character;
+            var vehicle = driver.CurrentVehicle;
+            if (vehicle == null || !vehicle.Exists() || vehicle.IsDead) return;
+            if (driver.IsDead) return;
 
-            if (vehicle == null || !vehicle.Exists() || vehicle.IsDead)
-                return;
+            var entities = _entityDetector.ScanSurroundings(vehicle);
+            var pathInfo = _pathNav.GetNextWaypoint(vehicle);
 
-            if (player.Character.IsDead)
-                return;
-
-            // --- Perception Phase ---
-            // Path navigation always uses game API (visual can't do GPS)
-            var pathInfo = PathNavigator.GetNextWaypoint(vehicle);
-
-            List<EntityInfo> entities;
-            TrafficLightState trafficLight;
-            float laneOffset;
-
-            if (_perceptionMode == PerceptionMode.Vision || _perceptionMode == PerceptionMode.Hybrid)
+            if (_destSet)
             {
-                // Use visual perception from Python pipeline
-                var visionData = _visionReceiver.GetLatestData();
-                if (visionData != null)
+                // Re-issue AI drive task every ~2 seconds to keep it active
+                _tickSinceTaskIssue++;
+                if (_tickSinceTaskIssue > 120)
                 {
-                    entities = visionData.ToEntityInfoList();
-                    trafficLight = (TrafficLightState)visionData.TrafficLight;
-                    laneOffset = visionData.LaneOffset;
-                }
-                else
-                {
-                    // Fallback to game API if no vision data available
-                    entities = EntityDetector.ScanSurroundings(vehicle);
-                    trafficLight = TrafficLightDetector.GetCurrentState(vehicle, pathInfo);
-                    laneOffset = LaneKeeper.GetSteerCorrection(vehicle, pathInfo);
+                    Function.Call(Hash.TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE,
+                        driver, vehicle,
+                        _destination.X, _destination.Y, _destination.Z,
+                        20f,    // speed m/s
+                        4 | 16 | 32 | 128 | 2048,  // avoid vehicles(4) + avoid objects(16) + avoid peds(32) + allow wrong way(128) + allow stop(2048)
+                        10f);   // stop range (meters)
+                    _tickSinceTaskIssue = 0;
                 }
 
-                // Game API navigation is always used (path, collision, speed, intersection)
-            }
-            else
-            {
-                entities = EntityDetector.ScanSurroundings(vehicle);
-                trafficLight = TrafficLightDetector.GetCurrentState(vehicle, pathInfo);
-                laneOffset = LaneKeeper.GetSteerCorrection(vehicle, pathInfo);
-            }
-
-            var collisionRisk = CollisionPredictor.EvaluateRisk(vehicle, entities);
-            var targetSpeed = SpeedGovernor.GetTargetSpeed(vehicle, pathInfo, entities);
-            var intersectionInfo = IntersectionHandler.EvaluateIntersection(vehicle, pathInfo);
-
-            // --- Decision Phase ---
-            var sensorData = new SensorData
-            {
-                Vehicle = vehicle,
-                PathInfo = pathInfo,
-                NearbyEntities = entities,
-                TrafficLightState = trafficLight,
-                CollisionRisk = collisionRisk,
-                LaneOffset = laneOffset,
-                TargetSpeed = targetSpeed,
-                IntersectionInfo = intersectionInfo,
-                SourceMode = _perceptionMode
-            };
-
-            var command = DecisionEngine.Evaluate(sensorData);
-
-            // --- Execution Phase ---
-            VehicleController.Execute(vehicle, command);
-
-            // --- Telemetry ---
-            if (_recordingEnabled)
-            {
-                TelemetryExporter.Send(sensorData, command);
+                // Check arrival
+                float distToDest = Vector3.Distance(vehicle.Position, _destination);
+                if (distToDest < 15f)
+                {
+                    Function.Call(Hash.CLEAR_PED_TASKS, driver);
+                    _autoPilotEnabled = false;
+                    _vehicleCtrl.Release();
+                    _destSet = false;
+                    GTA.UI.Screen.ShowSubtitle("Destination reached!", 4000);
+                }
             }
 
-            // --- Debug ---
-            _debugOverlay.Render(sensorData, command, DecisionEngine.CurrentState);
+            // Debug
+            _debugFrameCounter++;
+            if (_debugFrameCounter % 30 == 0)
+            {
+                float dist = _destSet ? Vector3.Distance(vehicle.Position, _destination) : 0f;
+                GTA.UI.Screen.ShowSubtitle(
+                    $"AI Drive | Dist={dist:F0}m | Spd={vehicle.Speed * 3.6f:F0}km/h | Ent={entities.Count}", 1000);
+            }
+
+            _debugOverlay.Render(
+                new SensorData
+                {
+                    Vehicle = vehicle, PathInfo = pathInfo,
+                    NearbyEntities = entities, LaneOffset = 0f,
+                    TargetSpeed = 20f, SourceMode = _perceptionMode
+                }, new DrivingCommand { TargetSpeed = 20f }, DecisionState.Cruising);
         }
 
         private void OnKeyDown(object sender, KeyEventArgs e)
         {
-            _debugCommands.HandleKeyDown(e);
+            if (e.KeyCode == Keys.NumPad0) ToggleAutoPilot();
+            else if (e.KeyCode == Keys.NumPad1) ToggleDebugOverlay();
+            else if (e.KeyCode == Keys.NumPad2) SetDestination();
+            else if (e.KeyCode == Keys.Decimal && _autoPilotEnabled) ToggleAutoPilot();
+            e.Handled = true;
         }
-
-        private void OnKeyUp(object sender, KeyEventArgs e)
-        {
-            _debugCommands.HandleKeyUp(e);
-        }
-
-        // --- Public API for DebugCommands ---
 
         public void ToggleAutoPilot()
         {
             _autoPilotEnabled = !_autoPilotEnabled;
-
             if (_autoPilotEnabled)
             {
-                var player = Game.Player;
-                var vehicle = player.Character.CurrentVehicle;
-                if (vehicle != null && vehicle.Exists())
-                {
-                    PathNavigator.Reset(vehicle);
-                }
+                var v = Game.Player.Character.CurrentVehicle;
+                if (v != null && v.Exists()) _pathNav.Reset(v);
+                _tickSinceTaskIssue = 999; // Issue task on next tick
             }
             else
             {
-                VehicleController.Release();
+                _vehicleCtrl.Release();
+                Function.Call(Hash.CLEAR_PED_TASKS, Game.Player.Character);
             }
-
-            UI.Notify(_autoPilotEnabled ? "~g~AutoPilot ON" : "~r~AutoPilot OFF");
-        }
-
-        public void ToggleRecording()
-        {
-            _recordingEnabled = !_recordingEnabled;
-
-            if (_recordingEnabled)
-            {
-                TelemetryExporter.StartRecording();
-            }
-            else
-            {
-                TelemetryExporter.StopRecording();
-            }
-
-            UI.Notify(_recordingEnabled ? "~y~Recording ON" : "~y~Recording OFF");
-        }
-
-        public void SetDestination()
-        {
-            var waypoint = World.WaypointPosition;
-            if (waypoint != Vector3.Zero)
-            {
-                PathNavigator.SetDestination(waypoint);
-                UI.Notify("~b~Destination set to map waypoint");
-            }
+            GTA.UI.Screen.ShowSubtitle(_autoPilotEnabled ? "AutoPilot ON (AI)" : "AutoPilot OFF", 2000);
         }
 
         public void ToggleDebugOverlay()
         {
             _debugOverlay.Enabled = !_debugOverlay.Enabled;
-            UI.Notify(_debugOverlay.Enabled ? "~b~Debug overlay ON" : "~b~Debug overlay OFF");
+            GTA.UI.Screen.ShowSubtitle(_debugOverlay.Enabled ? "Debug ON" : "Debug OFF", 2000);
         }
 
-        public void CyclePerceptionMode()
+        public void SetDestination()
         {
-            switch (_perceptionMode)
+            try
             {
-                case PerceptionMode.GameAPI:
-                    _perceptionMode = PerceptionMode.Vision;
-                    UI.Notify("~b~Perception: VISION");
-                    break;
-                case PerceptionMode.Vision:
-                    _perceptionMode = PerceptionMode.Hybrid;
-                    UI.Notify("~b~Perception: HYBRID");
-                    break;
-                case PerceptionMode.Hybrid:
-                    _perceptionMode = PerceptionMode.GameAPI;
-                    UI.Notify("~b~Perception: GAME API");
-                    break;
+                int id = Function.Call<int>(Hash.GET_FIRST_BLIP_INFO_ID, 8);
+                if (Function.Call<bool>(Hash.DOES_BLIP_EXIST, id))
+                {
+                    var wp = Function.Call<Vector3>(Hash.GET_BLIP_INFO_ID_COORD, id);
+                    if (wp != Vector3.Zero)
+                    {
+                        _destination = wp;
+                        _destSet = true;
+                        _pathNav.SetDestination(wp);
+                        _tickSinceTaskIssue = 999;
+                        GTA.UI.Screen.ShowSubtitle($"Dest: {wp.X:F0},{wp.Y:F0}", 4000);
+                        return;
+                    }
+                }
             }
+            catch { }
+            GTA.UI.Screen.ShowSubtitle("No waypoint", 2000);
         }
+
+        public void ToggleRecording() { }
+        public void CyclePerceptionMode() { }
     }
 }

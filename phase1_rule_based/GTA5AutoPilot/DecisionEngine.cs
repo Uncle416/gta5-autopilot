@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using GTA;
 using GTA.Math;
+using GTA.Native;
 
 namespace GTA5AutoPilot.Modules
 {
@@ -116,7 +117,7 @@ namespace GTA5AutoPilot.Modules
             if (currentSpeed < 0.5f)
             {
                 TransitionTo(DecisionState.WaitingAtLight);
-                _waitStartTime = (float)Time.CurrentTime;
+                _waitStartTime = (float)Game.GameTime / 1000f;
                 return DrivingCommand.Stop();
             }
 
@@ -159,7 +160,7 @@ namespace GTA5AutoPilot.Modules
 
         private DrivingCommand HandleWaitingAtLight(SensorData data)
         {
-            float waitTime = (float)Time.CurrentTime - _waitStartTime;
+            float waitTime = (float)Game.GameTime / 1000f - _waitStartTime;
 
             if (data.TrafficLightState == TrafficLightState.Green ||
                 data.TrafficLightState == TrafficLightState.None)
@@ -260,19 +261,19 @@ namespace GTA5AutoPilot.Modules
             float speedError = data.TargetSpeed - data.Vehicle.Speed;
 
             // PI controller for speed
-            float dt = Time.DeltaTime;
+            float dt = 0.016f; // ~60 FPS
             _speedIntegral += speedError * dt;
-            _speedIntegral = Math.Max(-3f, Math.Min(3f, _speedIntegral));
+            _speedIntegral = System.Math.Max(-3f, System.Math.Min(3f, _speedIntegral));
 
             float throttle = 0.4f * speedError + 0.1f * _speedIntegral;
-            throttle = Math.Max(0f, Math.Min(1f, throttle));
+            throttle = System.Math.Max(0f, System.Math.Min(1f, throttle));
 
             // If speed is too high, apply brake instead
             float brake = 0f;
             if (speedError < -5f)
             {
                 throttle = 0f;
-                brake = Math.Min(0.5f, Math.Abs(speedError) / 20f);
+                brake = System.Math.Min(0.5f, System.Math.Abs(speedError) / 20f);
             }
 
             return new DrivingCommand
@@ -298,13 +299,13 @@ namespace GTA5AutoPilot.Modules
 
                 Vector3 forward = data.Vehicle.ForwardVector;
                 float cross = Vector3.Cross(forward, toWaypoint).Z;
-                float waypointSteer = Math.Max(-0.5f, Math.Min(0.5f, cross * 1.5f));
+                float waypointSteer = System.Math.Max(-0.5f, System.Math.Min(0.5f, cross * 1.5f));
 
                 // Blend lane keeping and waypoint following
                 steer = steer * 0.6f + waypointSteer * 0.4f;
             }
 
-            return Math.Max(-1f, Math.Min(1f, steer));
+            return System.Math.Max(-1f, System.Math.Min(1f, steer));
         }
 
         private bool TryEvade(SensorData data)
@@ -315,10 +316,10 @@ namespace GTA5AutoPilot.Modules
 
             // Check if lane change is possible
             // Simplified: check both sides for obstacles
-            bool leftClear = EntryPoint.Instance?._collisionPredictor?.IsLaneChangeSafeLeft(
-                data.Vehicle, data.NearbyEntities, -data.Vehicle.RightVector);
-            bool rightClear = EntryPoint.Instance?._collisionPredictor?.IsLaneChangeSafeRight(
-                data.Vehicle, data.NearbyEntities, data.Vehicle.RightVector);
+            bool leftClear = EntryPoint.Instance?.CollisionPredictor?.IsLaneChangeSafeLeft(
+                data.Vehicle, data.NearbyEntities, -data.Vehicle.RightVector) ?? false;
+            bool rightClear = EntryPoint.Instance?.CollisionPredictor?.IsLaneChangeSafeRight(
+                data.Vehicle, data.NearbyEntities, data.Vehicle.RightVector) ?? false;
 
             return leftClear || rightClear;
         }
@@ -355,7 +356,7 @@ namespace GTA5AutoPilot.Modules
                 float dotRight = Vector3.Dot(toEntity, right);
 
                 // Entities coming from sides within 20m
-                if (Math.Abs(dotRight) > Math.Abs(dotForward) && entity.Distance < 20f && entity.Speed > 2f)
+                if (System.Math.Abs(dotRight) > System.Math.Abs(dotForward) && entity.Distance < 20f && Function.Call<float>(Hash.GET_ENTITY_SPEED, entity.Entity) > 2f)
                     return true;
             }
 
@@ -369,7 +370,7 @@ namespace GTA5AutoPilot.Modules
 
             if (data.Vehicle.Speed < Configuration.StuckSpeedThreshold)
             {
-                _stuckTimer += Time.DeltaTime;
+                _stuckTimer += 0.016f; // ~60 FPS
 
                 // Check if we've moved
                 if (Vector3.Distance(data.Vehicle.Position, _stuckPosition) > 1f)
