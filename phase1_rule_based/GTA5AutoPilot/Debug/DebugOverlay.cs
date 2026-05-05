@@ -27,33 +27,8 @@ namespace GTA5AutoPilot.Debug
 
         private void DrawTextBlock(SensorData data, DrivingCommand command, DecisionState state)
         {
-            float x = 0.01f;
-            float y = 0.30f;
-            float scale = 0.35f;
-            var color = System.Drawing.Color.White;
-
-            var lines = new[]
-            {
-                $"=== GTA5 AutoPilot ===",
-                $"State: {GetStateColor(state)}{state}~w~",
-                $"Speed: {data.Vehicle.Speed * 3.6f:F0} km/h | Target: {data.TargetSpeed * 3.6f:F0} km/h",
-                $"Steer: {command.Steer:+0.00;-0.00} | Throttle: {command.Throttle:F2} | Brake: {command.Brake:F2}",
-                $"Road: {RoadTypeName(data.PathInfo.RoadType)} | Lanes: {data.PathInfo.LaneCount}",
-                $"Intersection: {(data.PathInfo.IsIntersectionAhead ? $"~y~YES ({data.PathInfo.DistanceToIntersection:F0}m)" : "~g~NO")}",
-                $"TrafficLight: {GetLightColor(data.TrafficLightState)}{data.TrafficLightState}",
-                $"CollisionRisk: {GetRiskColor(data.CollisionRisk)}{data.CollisionRisk}",
-                $"Entities: {data.NearbyEntities.Count} nearby",
-                $"LaneOffset: {data.LaneOffset:+0.00;-0.00}",
-                $"Dist to Dest: {(data.PathInfo.HasDestination ? $"{data.PathInfo.DistanceToDestination:F0}m" : "N/A")}",
-            };
-
-            foreach (var line in lines)
-            {
-                // Use simple text element at screen position
-                GTA.UI.Screen.ShowSubtitle(line, 10);
-                y += 0.025f;
-                // Note: In real use, use TextElement for persistent multi-line display
-            }
+            // Text block disabled — ShowSubtitle is not suitable for persistent multi-line text.
+            // Use the per-frame debug subtitle in EntryPoint instead.
         }
 
         private void DrawEntityBoxes(SensorData data)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using GTA;
 using GTA.Math;
+using GTA.Native;
 
 namespace GTA5AutoPilot.Modules
 {
@@ -63,21 +64,21 @@ namespace GTA5AutoPilot.Modules
         private EntityInfo CreateEntityInfo(Entity entity, Vector3 entityPos, float dist,
             Vector3 egoPos, Vector3 egoForward, float egoSpeed, float egoHeading)
         {
-            Vector3 entityVel = entity.Velocity;
-            float entitySpeed = entity.Speed;
+            Vector3 entityVel = Function.Call<Vector3>(Hash.GET_ENTITY_VELOCITY, entity);
+            float entitySpeed = Function.Call<float>(Hash.GET_ENTITY_SPEED, entity);
 
             // Check if entity is in forward cone
             Vector3 toEntity = (entityPos - egoPos);
             toEntity.Normalize();
             float dotForward = Vector3.Dot(egoForward, toEntity);
-            bool inForwardCone = dotForward > Math.Cos(Configuration.ForwardConeAngle * Math.PI / 180f);
+            bool inForwardCone = dotForward > System.Math.Cos(Configuration.ForwardConeAngle * System.Math.PI / 180f);
 
             // Check if oncoming (opposite direction)
             bool isOncoming = false;
             if (entitySpeed > 2f && egoSpeed > 2f)
             {
                 float entityHeading = entity.Heading;
-                float headingDiff = Math.Abs(entityHeading - egoHeading);
+                float headingDiff = System.Math.Abs(entityHeading - egoHeading);
                 if (headingDiff > 180f) headingDiff = 360f - headingDiff;
                 if (headingDiff > 90f && headingDiff < 270f)
                     isOncoming = true;
@@ -88,7 +89,7 @@ namespace GTA5AutoPilot.Modules
             if (inForwardCone || dist < 10f)
             {
                 float closingSpeed = egoSpeed + (isOncoming ? entitySpeed : -entitySpeed);
-                closingSpeed = Math.Max(0.1f, closingSpeed);
+                closingSpeed = System.Math.Max(0.1f, closingSpeed);
                 ttc = dist / closingSpeed;
             }
 

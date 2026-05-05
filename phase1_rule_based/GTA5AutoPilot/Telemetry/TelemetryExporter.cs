@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Threading;
 using GTA;
 using GTA.Math;
+using GTA.UI;
 
 namespace GTA5AutoPilot.Telemetry
 {
@@ -54,8 +55,7 @@ namespace GTA5AutoPilot.Telemetry
             {
                 // Connection failed — recording will work without remote endpoint
                 // Data can still be logged locally in the future
-                GTA.UI.Notification.Show(GTA.UI.NotificationIcon.Warning,
-                    "Telemetry", "Collector", "Could not connect to Python recorder. Telemetry will not be saved.");
+                Notification.Show("Could not connect to Python recorder. Telemetry will not be saved.");
             }
         }
 
@@ -113,7 +113,7 @@ namespace GTA5AutoPilot.Telemetry
             {
                 // Frame header
                 bw.Write(_frameId);
-                bw.Write((ulong)(Time.CurrentTime * 1000));
+                bw.Write((ulong)(Game.GameTime));
 
                 // Vehicle state
                 var v = data.Vehicle;
