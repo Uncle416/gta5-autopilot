@@ -16,6 +16,7 @@
       <Private>false</Private>
     </Reference>
 
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
 

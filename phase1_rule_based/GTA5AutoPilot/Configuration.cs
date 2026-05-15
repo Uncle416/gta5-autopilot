@@ -58,5 +58,13 @@ namespace GTA5AutoPilot
         public const string TelemetryHost = "127.0.0.1";
         public const int TelemetryPort = 21555;
         public const int TelemetrySendIntervalMs = 50;   // Send telemetry every 50ms (20 Hz)
+
+        // --- Navigation ---
+        public const int CommandServerPort = 21556;       // TCP port for NLU commands
+        public const float DestinationArrivalRadius = 15f; // Distance to consider destination reached
+        public const int AiTaskReissueInterval = 120;      // Ticks between AI task re-issues (~2s)
+        public const float AiDrivingSpeed = 20f;           // Default AI driving speed (m/s)
+        public const int AiDrivingFlags = 4 | 16 | 32 | 128 | 2048;
+        // avoid vehicles(4) | avoid objects(16) | avoid peds(32) | allow wrong way(128) | allow stop(2048)
     }
 }

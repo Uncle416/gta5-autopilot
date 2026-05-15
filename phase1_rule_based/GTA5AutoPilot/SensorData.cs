@@ -18,7 +18,6 @@ namespace GTA5AutoPilot
         public float LaneOffset;
         public float TargetSpeed;
         public IntersectionInfo IntersectionInfo;
-        public PerceptionMode SourceMode = PerceptionMode.GameAPI;
     }
 
     public enum CollisionRiskLevel
@@ -28,13 +27,6 @@ namespace GTA5AutoPilot
         Medium,
         High,
         Imminent
-    }
-
-    public enum PerceptionMode
-    {
-        GameAPI,    // Use GTA V internal APIs (Phase 1 default)
-        Vision,     // Use Python visual perception pipeline (Phase 2)
-        Hybrid      // Vision for entities + traffic lights, GameAPI for navigation
     }
 
     public enum TrafficLightState
