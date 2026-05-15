@@ -8,10 +8,9 @@ namespace GTA5AutoPilot.Debug
     /// Controls:
     ///   Numpad0      - Toggle autopilot on/off
     ///   Numpad1      - Toggle debug overlay
-    ///   Numpad2      - Set destination to map waypoint
-    ///   Numpad3      - Toggle telemetry recording
-    ///   Numpad4      - Increase target speed
-    ///   Numpad5      - Decrease target speed
+    ///   Numpad2      - Set destination from map waypoint (fallback)
+    ///   Numpad7      - Yes: continue to next waypoint
+    ///   Numpad8      - No: stop navigation
     ///   NumpadDecimal - Emergency stop
     /// </summary>
     public class DebugCommands
@@ -38,36 +37,23 @@ namespace GTA5AutoPilot.Debug
                     break;
 
                 case Keys.NumPad2:
-                    _entryPoint.SetDestination();
+                    _entryPoint.SetDestinationFromMap();
                     e.Handled = true;
                     break;
 
-                case Keys.NumPad3:
-                    _entryPoint.ToggleRecording();
+                case Keys.NumPad7:
+                    _entryPoint.ContinueNavigation();
                     e.Handled = true;
                     break;
 
-                case Keys.NumPad4:
-                    // Increase max speed (modify Configuration at runtime)
-                    e.Handled = true;
-                    break;
-
-                case Keys.NumPad5:
-                    // Decrease max speed
-                    e.Handled = true;
-                    break;
-
-                case Keys.NumPad6:
-                    _entryPoint.CyclePerceptionMode();
+                case Keys.NumPad8:
+                    _entryPoint.StopAutopilot();
                     e.Handled = true;
                     break;
 
                 case Keys.Decimal:
-                    // Emergency stop: disengage autopilot
                     if (_entryPoint.AutoPilotEnabled)
-                    {
-                        _entryPoint.ToggleAutoPilot();
-                    }
+                        _entryPoint.StopAutopilot();
                     e.Handled = true;
                     break;
             }
