@@ -6,7 +6,7 @@
 
 ### 核心理念
 
-不训练驾驶模型，不做视觉感知。**利用 GTA V 自身强大的 AI 驾驶能力**（`TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE`），在上面包装一层自然语言理解（NLU）+ 多点导航管理。
+**直接利用 GTA V 自身的自动驾驶API**（`TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE`），在上面包装一层自然语言理解（NLU）+ 多点导航管理。
 
 ---
 
