@@ -55,6 +55,9 @@ namespace GTA5AutoPilot
         private string _arrivedName;
         private bool _arrivedWasStuck;
 
+        // Auto-detect map blip after closing map
+        private Vector3 _lastKnownBlipPos;
+
         // (GPS handled by AI driving task natively)
 
         public EntryPoint()
@@ -134,6 +137,25 @@ namespace GTA5AutoPilot
             // Timer for NLU display
             if (_nluShowTimer > 0) _nluShowTimer--;
 
+            // Auto-detect map blip after closing map (OnTick suspended while map open)
+            if (_statusCounter % 10 == 0)
+            {
+                Vector3 blip = ReadMapBlipPos();
+                if (blip != Vector3.Zero && Vector3.Distance(blip, _lastKnownBlipPos) > 3f)
+                {
+                    _lastKnownBlipPos = blip;
+                    if (!_waypointManager.ContainsNear(blip, 5f))
+                    {
+                        _waypointManager.AddWaypoint(new Waypoint($"WP{_waypointManager.TotalCount + 1}", blip));
+                        SetGpsToCurrent();
+                        GTA.UI.Screen.ShowSubtitle(
+                            $"WP {_waypointManager.TotalCount} added | {_waypointManager.TotalCount} total", 3000);
+                    }
+                }
+                if (blip == Vector3.Zero)
+                    _lastKnownBlipPos = Vector3.Zero;
+            }
+
             if (!_autoPilotEnabled) return;
 
             var driver = Game.Player.Character;
@@ -195,6 +217,7 @@ namespace GTA5AutoPilot
                         // First issue after navigation start
                         shouldReissue = true;
                         _lastProgressDist = distToDest;
+                        SetGpsToCurrent(); // refresh after map closed
                     }
                     else if (_progressCheckTicks >= 180) // check every ~6s
                     {
@@ -293,7 +316,7 @@ namespace GTA5AutoPilot
         {
             if (e.KeyCode == Keys.NumPad0) ToggleAutoPilot();
             else if (e.KeyCode == Keys.NumPad1) ToggleDebugOverlay();
-            else if (e.KeyCode == Keys.NumPad2) SetDestinationFromMap();
+            else if (e.KeyCode == Keys.NumPad2) AddCurrentMapBlip();
             else if (e.KeyCode == Keys.NumPad3) _showQueue = true;
             else if (e.KeyCode == Keys.NumPad7) ContinueNavigation();
             else if (e.KeyCode == Keys.NumPad8) StopAutopilot();
@@ -355,35 +378,43 @@ namespace GTA5AutoPilot
         private void SetGpsToCurrent()
         {
             Vector3 dest = _waypointManager.GetCurrentDestination();
+            // Fallback: first queued waypoint when not yet driving
+            if (dest == Vector3.Zero && _waypointManager.TotalCount > 0)
+                dest = _waypointManager.Waypoints[0].Position;
             if (dest != Vector3.Zero)
                 Function.Call(Hash.SET_NEW_WAYPOINT, dest.X, dest.Y);
         }
 
-        public void SetDestinationFromMap()
+        private Vector3 ReadMapBlipPos()
         {
             try
             {
                 int id = Function.Call<int>(Hash.GET_FIRST_BLIP_INFO_ID, 8);
                 if (Function.Call<bool>(Hash.DOES_BLIP_EXIST, id))
-                {
-                    var wp = Function.Call<Vector3>(Hash.GET_BLIP_INFO_ID_COORD, id);
-                    if (wp != Vector3.Zero)
-                    {
-                        if (_waypointManager.ContainsNear(wp, 5f))
-                        {
-                            GTA.UI.Screen.ShowSubtitle("Already in queue", 2000);
-                            return;
-                        }
-                        _waypointManager.AddWaypoint(new Waypoint($"WP{_waypointManager.TotalCount + 1}", wp));
-                        // GPS line handled by SetGpsToCurrent() on autopilot start
-                        GTA.UI.Screen.ShowSubtitle(
-                            $"WP {_waypointManager.TotalCount} added | {_waypointManager.TotalCount} total", 3000);
-                        return;
-                    }
-                }
+                    return Function.Call<Vector3>(Hash.GET_BLIP_INFO_ID_COORD, id);
             }
             catch { }
-            GTA.UI.Screen.ShowSubtitle("No map waypoint found", 2000);
+            return Vector3.Zero;
+        }
+
+        private void AddCurrentMapBlip()
+        {
+            Vector3 wp = ReadMapBlipPos();
+            if (wp == Vector3.Zero)
+            {
+                GTA.UI.Screen.ShowSubtitle("No map waypoint found", 2000);
+                return;
+            }
+            if (_waypointManager.ContainsNear(wp, 5f))
+            {
+                GTA.UI.Screen.ShowSubtitle("Already in queue", 2000);
+                return;
+            }
+            _waypointManager.AddWaypoint(new Waypoint($"WP{_waypointManager.TotalCount + 1}", wp));
+            _lastKnownBlipPos = wp;
+            SetGpsToCurrent();
+            GTA.UI.Screen.ShowSubtitle(
+                $"WP {_waypointManager.TotalCount} added | {_waypointManager.TotalCount} total", 3000);
         }
 
         public void ContinueNavigation()
