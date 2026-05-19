@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using GTA;
 using GTA.Math;
@@ -24,17 +25,44 @@ namespace GTA5AutoPilot
         private DebugOverlay _debugOverlay;
         private WaypointManager _waypointManager;
         private TcpCommandServer _tcpServer;
+        private LlamaNavigator _llamaNav;
 
         private bool _autoPilotEnabled;
-        private int _debugFrameCounter;
         private int _tickSinceTaskIssue;
         private int _arrivalDisplayTimer;
+        private int _statusCounter;
+
+        // Keyboard
+        private bool _keyboardActive;
+        private bool _showQueue;
+
+        // LLM
+        private Task<(List<Waypoint>, string)> _pendingNluTask;
+        private bool _nluProcessing;
+        private string _lastNluResult;
+        private int _nluShowTimer;
+
+        // Progress-based task reissue (not timer-based — avoids resetting AI state)
+        private float _lastProgressDist = float.MaxValue;
+        private int _progressCheckTicks;
+
+        // Stuck detection
+        private float _lastDestDist = float.MaxValue;
+        private int _destStuckTicks;
+
+        // Arrival braking
+        private bool _arrivalStopping;
+        private string _arrivedName;
+        private bool _arrivedWasStuck;
+
+        // (GPS handled by AI driving task natively)
 
         public EntryPoint()
         {
             Instance = this;
             Tick += OnTick;
             KeyDown += OnKeyDown;
+            KeyUp += OnKeyUp;
             Interval = 0;
 
             _vehicleCtrl = new VehicleController();
@@ -44,48 +72,68 @@ namespace GTA5AutoPilot
             _debugOverlay = new DebugOverlay();
             _waypointManager = new WaypointManager();
 
-            // Start TCP command server + wire events
             _tcpServer = new TcpCommandServer(Configuration.CommandServerPort);
             _tcpServer.OnWaypointsReceived += OnWaypointsReceived;
             _tcpServer.OnCommandReceived += OnTcpCommand;
             _tcpServer.Start();
 
-            GTA.UI.Screen.ShowSubtitle("GTA5AutoPilot loaded (NL Nav)", 3000);
+            _llamaNav = new LlamaNavigator(Configuration.LlamaModelPath);
+
+            GTA.UI.Screen.ShowSubtitle(
+                $"GTA5AutoPilot ready | LLM:{(_llamaNav.IsReady ? "on" : "off")}", 3000);
         }
 
         private void OnWaypointsReceived(List<Waypoint> waypoints)
         {
-            if (waypoints == null || waypoints.Count == 0)
-            {
-                GTA.UI.Screen.ShowSubtitle("No waypoints received", 3000);
-                return;
-            }
-
+            if (waypoints == null || waypoints.Count == 0) return;
             _waypointManager.LoadWaypoints(waypoints);
-
-            // Build confirmation message
-            string msg = $"Loaded {waypoints.Count} waypoints:";
-            for (int i = 0; i < waypoints.Count; i++)
-                msg += $"\n  {i + 1}. {waypoints[i].Name}";
-
-            GTA.UI.Screen.ShowSubtitle(msg, 5000);
+            GTA.UI.Screen.ShowSubtitle($"Loaded {waypoints.Count} waypoints via TCP", 4000);
         }
 
         private void OnTcpCommand(string action)
         {
-            switch (action)
-            {
-                case "continue":
-                    ContinueNavigation();
-                    break;
-                case "stop":
-                    StopAutopilot();
-                    break;
-            }
+            if (action == "continue") ContinueNavigation();
+            else if (action == "stop") StopAutopilot();
         }
 
         private void OnTick(object sender, EventArgs e)
         {
+            // ---- Keyboard poll ----
+            if (_keyboardActive)
+            {
+                int kbStatus = Function.Call<int>(Hash.UPDATE_ONSCREEN_KEYBOARD);
+                if (kbStatus == 2)
+                {
+                    string text = Function.Call<string>(Hash.GET_ONSCREEN_KEYBOARD_RESULT);
+                    _keyboardActive = false;
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        _nluProcessing = true;
+                        _nluShowTimer = 0;
+                        _pendingNluTask = _llamaNav.ParseNavigationAsync(text);
+                    }
+                }
+                else if (kbStatus == 3) _keyboardActive = false;
+            }
+
+            // ---- NLU completion ----
+            if (_nluProcessing && _pendingNluTask != null && _pendingNluTask.IsCompleted)
+            {
+                var (waypoints, response) = _pendingNluTask.Result;
+                _nluProcessing = false;
+                _lastNluResult = response;
+                _nluShowTimer = 600; // show result for ~10 seconds
+                if (waypoints.Count > 0)
+                {
+                    _waypointManager.LoadWaypoints(waypoints);
+                    _waypointManager.StartNavigation();
+                    SetGpsToCurrent();
+                }
+            }
+
+            // Timer for NLU display
+            if (_nluShowTimer > 0) _nluShowTimer--;
+
             if (!_autoPilotEnabled) return;
 
             var driver = Game.Player.Character;
@@ -93,83 +141,152 @@ namespace GTA5AutoPilot
             if (vehicle == null || !vehicle.Exists() || vehicle.IsDead) return;
             if (driver.IsDead) return;
 
-            var entities = _entityDetector.ScanSurroundings(vehicle);
-            var pathInfo = _pathNav.GetNextWaypoint(vehicle);
+            // ---- Arrival braking: keep braking until fully stopped ----
+            if (_arrivalStopping)
+            {
+                if (vehicle.Speed > 0.5f)
+                {
+                    // Loop brake: re-apply temp action while still moving
+                    Function.Call(Hash.TASK_VEHICLE_TEMP_ACTION, driver, vehicle, 1, 500);
+                }
+                else
+                {
+                    // Finally stopped — process arrival
+                    Function.Call(Hash.SET_VEHICLE_FORWARD_SPEED, vehicle, 0f);
+                    _arrivalStopping = false;
+                    _vehicleCtrl.Release();
+                    _destStuckTicks = 0;
+                    _lastDestDist = float.MaxValue;
+                    _lastProgressDist = float.MaxValue;
+                    _progressCheckTicks = 0;
 
-            // ---- Driving state ----
+                    bool isFinal = _waypointManager.OnArrival();
+                    string reason = _arrivedWasStuck ? " (skipped)" : "";
+                    if (isFinal)
+                    {
+                        _autoPilotEnabled = false;
+                        GTA.UI.Screen.ShowSubtitle($"Arrived: {_arrivedName}{reason}", 5000);
+                    }
+                    else
+                    {
+                        GTA.UI.Screen.ShowSubtitle(_waypointManager.GetCurrentPrompt() + reason, 5000);
+                        _arrivalDisplayTimer = 300;
+                    }
+                }
+                return; // skip driving logic while braking
+            }
+
+            // ---- Driving ----
             if (_waypointManager.State == NavigateState.Driving)
             {
                 Vector3 dest = _waypointManager.GetCurrentDestination();
                 if (dest != Vector3.Zero)
                 {
-                    // Re-issue AI drive task periodically
                     _tickSinceTaskIssue++;
-                    if (_tickSinceTaskIssue > Configuration.AiTaskReissueInterval)
+                    _progressCheckTicks++;
+
+                    float distToDest = Vector3.Distance(vehicle.Position, dest);
+
+                    // Issue task once, reissue only if genuinely stuck.
+                    // NPCs drive well because their task isn't constantly reset.
+                    bool shouldReissue = false;
+                    if (_lastProgressDist == float.MaxValue)
                     {
+                        // First issue after navigation start
+                        shouldReissue = true;
+                        _lastProgressDist = distToDest;
+                    }
+                    else if (_progressCheckTicks >= 180) // check every ~6s
+                    {
+                        float progress = _lastProgressDist - distToDest; // positive = closer
+                        bool makingProgress = progress > 3f;
+                        bool waitingAtLight = vehicle.Speed < 1f; // AI chose to stop (red light / traffic)
+                        bool safetyTimeout = _tickSinceTaskIssue > 900; // 30s max
+
+                        if (!makingProgress && !waitingAtLight)
+                            shouldReissue = true;
+                        else if (safetyTimeout)
+                            shouldReissue = true;
+
+                        _lastProgressDist = distToDest;
+                        _progressCheckTicks = 0;
+                    }
+
+                    if (shouldReissue)
+                    {
+                        Function.Call(Hash.SET_DRIVER_ABILITY, driver, 1.0f);
+                        Function.Call(Hash.SET_DRIVER_AGGRESSIVENESS, driver, 0.15f);
                         Function.Call(Hash.TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE,
                             driver, vehicle,
                             dest.X, dest.Y, dest.Z,
                             Configuration.AiDrivingSpeed,
                             Configuration.AiDrivingFlags,
-                            10f);
+                            Configuration.DestinationArrivalRadius);
                         _tickSinceTaskIssue = 0;
                     }
 
-                    // Check arrival
-                    float distToDest = Vector3.Distance(vehicle.Position, dest);
-                    if (distToDest < Configuration.DestinationArrivalRadius)
+                    // Stuck detection near destination
+                    if (distToDest < 40f && System.Math.Abs(distToDest - _lastDestDist) < 0.5f)
+                        _destStuckTicks++;
+                    else { _destStuckTicks = 0; _lastDestDist = distToDest; }
+
+                    bool reached = distToDest < Configuration.DestinationArrivalRadius;
+                    bool stuck = _destStuckTicks > Configuration.DestinationStuckTimeout;
+
+                    if (reached || stuck)
                     {
+                        _arrivedName = _waypointManager.CurrentWaypointName;
+                        _arrivedWasStuck = stuck;
+                        _arrivalStopping = true;
                         Function.Call(Hash.CLEAR_PED_TASKS, driver);
-                        _vehicleCtrl.Release();
-
-                        bool isFinal = _waypointManager.OnArrival();
-
-                        if (isFinal)
-                        {
-                            _autoPilotEnabled = false;
-                            GTA.UI.Screen.ShowSubtitle(
-                                $"Arrived at final destination: {_waypointManager.CurrentWaypointName}", 5000);
-                        }
-                        else
-                        {
-                            // Show prompt for next waypoint
-                            string prompt = _waypointManager.GetCurrentPrompt();
-                            GTA.UI.Screen.ShowSubtitle(prompt, 5000);
-                            _arrivalDisplayTimer = 300; // ~5s reminder
-                        }
                     }
                 }
             }
 
-            // Waiting state — periodically re-show prompt
+            // Minimap GPS: AI task doesn't show route; set waypoint at key transitions.
+            // (Handled in ToggleAutoPilot / ContinueNavigation / NLU load)
+
+            // Waiting at intermediate — show prompt until user responds
             if (_waypointManager.State == NavigateState.Waiting)
             {
                 _arrivalDisplayTimer--;
-                if (_arrivalDisplayTimer > 0 && _arrivalDisplayTimer % 150 == 0)
+                if (_arrivalDisplayTimer > 0)
                 {
-                    GTA.UI.Screen.ShowSubtitle(_waypointManager.GetCurrentPrompt(), 3000);
+                    if (_arrivalDisplayTimer % 60 == 0 || _arrivalDisplayTimer == 300)
+                        GTA.UI.Screen.ShowSubtitle(_waypointManager.GetCurrentPrompt(), 3000);
                 }
             }
 
-            // ---- Debug HUD ----
-            _debugFrameCounter++;
-            if (_debugFrameCounter % 30 == 0)
+            // ---- Status (suppressed while arrival prompt is active) ----
+            _statusCounter++;
+            if (_statusCounter % 30 == 0)
             {
-                string status = _waypointManager.GetStatusString(vehicle);
-                if (string.IsNullOrEmpty(status))
-                    status = _waypointManager.State == NavigateState.Waiting
-                        ? "WAITING" : "Idle";
-                GTA.UI.Screen.ShowSubtitle(
-                    $"AI | {status} | {vehicle.Speed * 3.6f:F0}km/h | Ent={entities.Count}", 1000);
+                if (_showQueue)
+                {
+                    GTA.UI.Screen.ShowSubtitle(_waypointManager.GetQueueString(), 800);
+                }
+                else if (_nluProcessing)
+                {
+                    GTA.UI.Screen.ShowSubtitle("Thinking...", 800);
+                }
+                else if (_nluShowTimer > 0)
+                {
+                    GTA.UI.Screen.ShowSubtitle(_lastNluResult ?? "", 800);
+                }
+                else if (_arrivalDisplayTimer > 0)
+                {
+                    // prompt handles display — skip normal status
+                }
+                else
+                {
+                    string status = _waypointManager.GetStatusString(vehicle);
+                    if (string.IsNullOrEmpty(status))
+                        status = _waypointManager.State == NavigateState.Waiting ? "WAITING" : "Idle";
+                    GTA.UI.Screen.ShowSubtitle(
+                        $"AI | {status} | {vehicle.Speed * 3.6f:F0}km/h", 1000);
+                }
             }
 
-            _debugOverlay.Render(
-                new SensorData
-                {
-                    Vehicle = vehicle, PathInfo = pathInfo,
-                    NearbyEntities = entities, LaneOffset = 0f,
-                    TargetSpeed = Configuration.AiDrivingSpeed
-                }, new DrivingCommand { TargetSpeed = Configuration.AiDrivingSpeed }, DecisionState.Cruising);
         }
 
         private void OnKeyDown(object sender, KeyEventArgs e)
@@ -177,10 +294,37 @@ namespace GTA5AutoPilot
             if (e.KeyCode == Keys.NumPad0) ToggleAutoPilot();
             else if (e.KeyCode == Keys.NumPad1) ToggleDebugOverlay();
             else if (e.KeyCode == Keys.NumPad2) SetDestinationFromMap();
+            else if (e.KeyCode == Keys.NumPad3) _showQueue = true;
             else if (e.KeyCode == Keys.NumPad7) ContinueNavigation();
             else if (e.KeyCode == Keys.NumPad8) StopAutopilot();
+            else if (e.KeyCode == Keys.NumPad9) ShowNluKeyboard();
             else if (e.KeyCode == Keys.Decimal && _autoPilotEnabled) StopAutopilot();
             e.Handled = true;
+        }
+
+        private void OnKeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.NumPad3) _showQueue = false;
+        }
+
+        private void ShowNluKeyboard()
+        {
+            if (_keyboardActive) return;
+            if (!_llamaNav.IsReady)
+            {
+                GTA.UI.Screen.ShowSubtitle("LLM model not found at scripts/models/", 5000);
+                return;
+            }
+            _keyboardActive = true;
+            Function.Call(Hash.DISPLAY_ONSCREEN_KEYBOARD,
+                0, "NAVIGATION", "", "", "", "", "", "", "",
+                "e.g. 去机场然后回家", 200);
+        }
+
+        public void ToggleDebugOverlay()
+        {
+            _debugOverlay.Enabled = !_debugOverlay.Enabled;
+            GTA.UI.Screen.ShowSubtitle(_debugOverlay.Enabled ? "Debug ON" : "Debug OFF", 2000);
         }
 
         public void ToggleAutoPilot()
@@ -190,28 +334,31 @@ namespace GTA5AutoPilot
             {
                 var v = Game.Player.Character.CurrentVehicle;
                 if (v != null && v.Exists()) _pathNav.Reset(v);
-                _tickSinceTaskIssue = 999; // Issue task on next tick
-
-                // If waypoints loaded but not driving, start
-                if (_waypointManager.TotalCount > 0 &&
-                    _waypointManager.State != NavigateState.Driving)
+                _tickSinceTaskIssue = 0;
+                _progressCheckTicks = 0;
+                _lastProgressDist = float.MaxValue;
+                _arrivalStopping = false;
+                if (_waypointManager.TotalCount > 0 && _waypointManager.State != NavigateState.Driving)
+                {
                     _waypointManager.StartNavigation();
+                    SetGpsToCurrent();
+                }
             }
             else
             {
                 _vehicleCtrl.Release();
                 Function.Call(Hash.CLEAR_PED_TASKS, Game.Player.Character);
             }
-            GTA.UI.Screen.ShowSubtitle(_autoPilotEnabled ? "AutoPilot ON (NL Nav)" : "AutoPilot OFF", 2000);
+            GTA.UI.Screen.ShowSubtitle(_autoPilotEnabled ? "AutoPilot ON" : "AutoPilot OFF", 2000);
         }
 
-        public void ToggleDebugOverlay()
+        private void SetGpsToCurrent()
         {
-            _debugOverlay.Enabled = !_debugOverlay.Enabled;
-            GTA.UI.Screen.ShowSubtitle(_debugOverlay.Enabled ? "Debug ON" : "Debug OFF", 2000);
+            Vector3 dest = _waypointManager.GetCurrentDestination();
+            if (dest != Vector3.Zero)
+                Function.Call(Hash.SET_NEW_WAYPOINT, dest.X, dest.Y);
         }
 
-        /// <summary>Fallback: set single destination from map waypoint.</summary>
         public void SetDestinationFromMap()
         {
             try
@@ -222,38 +369,44 @@ namespace GTA5AutoPilot
                     var wp = Function.Call<Vector3>(Hash.GET_BLIP_INFO_ID_COORD, id);
                     if (wp != Vector3.Zero)
                     {
-                        var wps = new List<Waypoint> { new Waypoint("Map Waypoint", wp) };
-                        _waypointManager.LoadWaypoints(wps);
-                        if (!_autoPilotEnabled) ToggleAutoPilot();
-                        else _waypointManager.StartNavigation();
-                        GTA.UI.Screen.ShowSubtitle($"Dest: {wp.X:F0},{wp.Y:F0}", 4000);
+                        if (_waypointManager.ContainsNear(wp, 5f))
+                        {
+                            GTA.UI.Screen.ShowSubtitle("Already in queue", 2000);
+                            return;
+                        }
+                        _waypointManager.AddWaypoint(new Waypoint($"WP{_waypointManager.TotalCount + 1}", wp));
+                        // GPS line handled by SetGpsToCurrent() on autopilot start
+                        GTA.UI.Screen.ShowSubtitle(
+                            $"WP {_waypointManager.TotalCount} added | {_waypointManager.TotalCount} total", 3000);
                         return;
                     }
                 }
             }
             catch { }
-            GTA.UI.Screen.ShowSubtitle("No waypoint on map", 2000);
+            GTA.UI.Screen.ShowSubtitle("No map waypoint found", 2000);
         }
 
         public void ContinueNavigation()
         {
             if (_waypointManager.State != NavigateState.Waiting)
             {
-                // If waypoints loaded but not started, start now
-                if (_waypointManager.TotalCount > 0 &&
-                    _waypointManager.State == NavigateState.Idle)
+                if (_waypointManager.TotalCount > 0 && _waypointManager.State == NavigateState.Idle)
                 {
                     _waypointManager.StartNavigation();
                     if (!_autoPilotEnabled) ToggleAutoPilot();
                 }
                 return;
             }
-
             if (_waypointManager.ContinueToNext())
             {
-                _tickSinceTaskIssue = 999;
+                _tickSinceTaskIssue = 0;
+                _progressCheckTicks = 0;
+                _lastProgressDist = float.MaxValue;
+                _arrivalStopping = false;
+                _arrivalDisplayTimer = 0; // reset so status shows again
+                SetGpsToCurrent();
                 GTA.UI.Screen.ShowSubtitle(
-                    $"Continuing to {_waypointManager.CurrentWaypointName} ({_waypointManager.CurrentIndex + 1}/{_waypointManager.TotalCount})", 3000);
+                    $"Next: {_waypointManager.CurrentWaypointName} | {_waypointManager.TotalCount} left", 3000);
             }
             else
             {
@@ -266,18 +419,12 @@ namespace GTA5AutoPilot
         public void StopAutopilot()
         {
             if (!_autoPilotEnabled && _waypointManager.State != NavigateState.Waiting) return;
-
             _waypointManager.StopNavigation();
             _autoPilotEnabled = false;
+            _arrivalStopping = false;
             _vehicleCtrl.Release();
             Function.Call(Hash.CLEAR_PED_TASKS, Game.Player.Character);
-            GTA.UI.Screen.ShowSubtitle("AutoPilot OFF — Stopped", 2000);
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            _tcpServer?.Stop();
-            base.Dispose(disposing);
+            GTA.UI.Screen.ShowSubtitle("Stopped — queue cleared", 2000);
         }
     }
 }

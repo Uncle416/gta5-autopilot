@@ -32,10 +32,11 @@ namespace GTA5AutoPilot
         public NavigateState State { get; private set; } = NavigateState.Idle;
         public int CurrentIndex => _currentIndex;
         public int TotalCount => _waypoints.Count;
+        public IReadOnlyList<Waypoint> Waypoints => _waypoints;
         public string CurrentWaypointName =>
             (_currentIndex >= 0 && _currentIndex < _waypoints.Count)
                 ? _waypoints[_currentIndex].Name : "";
-        public bool IsLastWaypoint => _currentIndex >= _waypoints.Count - 1;
+        public bool IsLastWaypoint => _waypoints.Count <= 1;
 
         public void LoadWaypoints(List<Waypoint> waypoints)
         {
@@ -64,31 +65,67 @@ namespace GTA5AutoPilot
         /// <returns>true if this is the final destination</returns>
         public bool OnArrival()
         {
-            State = NavigateState.Arrived;
             if (IsLastWaypoint)
             {
-                State = NavigateState.Idle;
+                _waypoints.Clear();
                 _currentIndex = -1;
-                return true; // final destination
+                State = NavigateState.Idle;
+                return true;
             }
+            // Remove completed waypoint, next becomes index 0
+            _waypoints.RemoveAt(_currentIndex);
+            // _currentIndex stays valid; if not last, point to next (now at same index)
             State = NavigateState.Waiting;
-            return false; // more waypoints ahead
+            return false;
         }
 
         public bool ContinueToNext()
         {
-            if (_currentIndex < _waypoints.Count - 1)
+            if (_waypoints.Count == 0)
             {
-                _currentIndex++;
-                State = NavigateState.Driving;
-                return true;
+                State = NavigateState.Idle;
+                _currentIndex = -1;
+                return false;
             }
-            State = NavigateState.Idle;
+            _currentIndex = 0;
+            State = NavigateState.Driving;
+            return true;
+        }
+
+        public string GetQueueString()
+        {
+            if (_waypoints.Count == 0) return "Queue empty";
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"{_waypoints.Count} WP(s): ");
+            int maxShow = 4;
+            for (int i = 0; i < _waypoints.Count && i < maxShow; i++)
+            {
+                var wp = _waypoints[i];
+                string mark = (State == NavigateState.Driving && i == 0) ? "*" : "";
+                if (i > 0) sb.Append(" | ");
+                sb.Append($"{i + 1}.{wp.Name}{mark}({wp.Position.X:F0},{wp.Position.Y:F0})");
+            }
+            if (_waypoints.Count > maxShow)
+                sb.Append($" ... +{_waypoints.Count - maxShow}");
+            return sb.ToString();
+        }
+
+        public bool ContainsNear(Vector3 pos, float threshold)
+        {
+            foreach (var wp in _waypoints)
+                if (Vector3.Distance(wp.Position, pos) < threshold)
+                    return true;
             return false;
+        }
+
+        public void AddWaypoint(Waypoint wp)
+        {
+            _waypoints.Add(wp);
         }
 
         public void StopNavigation()
         {
+            _waypoints.Clear();
             _currentIndex = -1;
             State = NavigateState.Idle;
         }
@@ -99,23 +136,22 @@ namespace GTA5AutoPilot
                 return "";
 
             float dist = Vector3.Distance(vehicle.Position, GetCurrentDestination());
-            return $"-> {CurrentWaypointName} ({_currentIndex + 1}/{TotalCount}) | {dist:F0}m";
+            return $"-> {CurrentWaypointName} | {dist:F0}m | {TotalCount} left";
         }
 
         public string GetNextWaypointName()
         {
-            int next = _currentIndex + 1;
-            if (next < _waypoints.Count)
-                return _waypoints[next].Name;
+            if (_waypoints.Count > 0)
+                return _waypoints[0].Name;
             return "";
         }
 
         public string GetCurrentPrompt()
         {
             if (State != NavigateState.Waiting) return "";
-            if (IsLastWaypoint)
-                return $"Arrived at final destination: {CurrentWaypointName}.";
-            return $"Arrived at {CurrentWaypointName}. Continue to {GetNextWaypointName()}? (Num7=Yes / Num8=No)";
+            if (_waypoints.Count == 0)
+                return "Navigation complete.";
+            return $"Arrived. Continue to {_waypoints[0].Name}? (Num7=Yes / Num8=No)";
         }
     }
 }

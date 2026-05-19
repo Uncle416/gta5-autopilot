@@ -12,7 +12,7 @@ namespace GTA5AutoPilot.Debug
     /// </summary>
     public class DebugOverlay
     {
-        public bool Enabled { get; set; } = true;
+        public bool Enabled { get; set; } = false; // default off
 
         public void Render(SensorData data, DrivingCommand command, DecisionState state)
         {
@@ -20,8 +20,8 @@ namespace GTA5AutoPilot.Debug
                 return;
 
             DrawTextBlock(data, command, state);
-            DrawEntityBoxes(data);
-            DrawWaypointMarker(data);
+            // DrawEntityBoxes(data);       // removed: entity circles
+            // DrawWaypointMarker(data);    // removed: blue waypoint pillar
             DrawTrafficLightInfo(data);
         }
 

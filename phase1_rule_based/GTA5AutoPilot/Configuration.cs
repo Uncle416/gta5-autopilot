@@ -23,9 +23,9 @@ namespace GTA5AutoPilot
         public const float MaxLaneSteerCorrection = 0.4f;
 
         // --- Speed Control ---
-        public const float UrbanSpeedLimit = 13.4f;    // 30 mph in m/s
-        public const float HighwaySpeedLimit = 31.3f;  // 70 mph in m/s
-        public const float IntersectionSpeedLimit = 6.7f; // 15 mph
+        public const float UrbanSpeedLimit = 26.8f;    // 60 mph in m/s
+        public const float HighwaySpeedLimit = 62.6f;  // 140 mph in m/s
+        public const float IntersectionSpeedLimit = 13.4f; // 30 mph
         public const float MinFollowDistance = 8f;      // Minimum distance to vehicle ahead
         public const float SafeFollowTimeGap = 2.0f;    // Seconds of following distance
 
@@ -60,11 +60,15 @@ namespace GTA5AutoPilot
         public const int TelemetrySendIntervalMs = 50;   // Send telemetry every 50ms (20 Hz)
 
         // --- Navigation ---
-        public const int CommandServerPort = 21556;       // TCP port for NLU commands
-        public const float DestinationArrivalRadius = 15f; // Distance to consider destination reached
-        public const int AiTaskReissueInterval = 120;      // Ticks between AI task re-issues (~2s)
-        public const float AiDrivingSpeed = 20f;           // Default AI driving speed (m/s)
-        public const int AiDrivingFlags = 4 | 16 | 32 | 128 | 2048;
-        // avoid vehicles(4) | avoid objects(16) | avoid peds(32) | allow wrong way(128) | allow stop(2048)
+        public const int CommandServerPort = 21556;
+        public const float DestinationArrivalRadius = 25f;    // Arrival threshold
+        public const int DestinationStuckTimeout = 600;       // ~10s stuck near dest → skip
+        public const int AiTaskReissueInterval = 300;  // ~10s, longer so AI can complete maneuvers (e.g. stop at red lights)
+        public const float AiDrivingSpeed = 25f;
+        public const int AiDrivingFlags = 1 | 2 | 8 | 16 | 32 | 64 | 128 | 2048;
+
+        // --- LLM ---
+        // Place a GGUF model at this path (relative to GTA V root)
+        public const string LlamaModelPath = "scripts/models/qwen-0.5b-q4.gguf";
     }
 }
