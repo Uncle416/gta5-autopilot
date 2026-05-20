@@ -357,6 +357,7 @@ namespace GTA5AutoPilot
             if (!_llamaNav.IsReady)
             {
                 GTA.UI.Screen.ShowSubtitle("LLM model not found at scripts/models/", 5000);
+                _suppressStatusTicks = 120;
                 return;
             }
             _keyboardActive = true;
