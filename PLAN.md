@@ -152,6 +152,8 @@ EntryPoint.OnTick
 | **NumPad1** | 继续到下一站 |
 | **NumPad2** | 停止导航 |
 | **NumPad3** | 按住显示途经队列 |
+| **NumPad4** | 降驾驶风格 (Sloth → Base → Aggressive → Mad Max) |
+| **NumPad5** | 升驾驶风格 |
 | **NumPad6** | NLU 自然语言输入（需下载 GGUF 模型） |
 | **小数点 (.)** | 紧急停止 |
 

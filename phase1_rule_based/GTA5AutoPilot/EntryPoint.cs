@@ -58,7 +58,10 @@ namespace GTA5AutoPilot
         // Auto-detect map blip after closing map
         private Vector3 _lastKnownBlipPos;
 
-        // (GPS handled by AI driving task natively)
+        // Runtime tunable (Num4/Num5)
+        private float _driverAggression = 0.15f;
+        private float _drivingSpeed = 25f;
+        private int _suppressStatusTicks;
 
         public EntryPoint()
         {
@@ -126,6 +129,7 @@ namespace GTA5AutoPilot
                 _nluProcessing = false;
                 _lastNluResult = response;
                 _nluShowTimer = 600; // show result for ~10 seconds
+                _suppressStatusTicks = 120;
                 if (waypoints.Count > 0)
                 {
                     _waypointManager.LoadWaypoints(waypoints);
@@ -238,11 +242,11 @@ namespace GTA5AutoPilot
                     if (shouldReissue)
                     {
                         Function.Call(Hash.SET_DRIVER_ABILITY, driver, 1.0f);
-                        Function.Call(Hash.SET_DRIVER_AGGRESSIVENESS, driver, 0.15f);
+                        Function.Call(Hash.SET_DRIVER_AGGRESSIVENESS, driver, _driverAggression);
                         Function.Call(Hash.TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE,
                             driver, vehicle,
                             dest.X, dest.Y, dest.Z,
-                            Configuration.AiDrivingSpeed,
+                            _drivingSpeed,
                             Configuration.AiDrivingFlags,
                             Configuration.DestinationArrivalRadius);
                         _tickSinceTaskIssue = 0;
@@ -280,8 +284,9 @@ namespace GTA5AutoPilot
                 }
             }
 
-            // ---- Status (suppressed while arrival prompt is active) ----
+            // ---- Status (suppressed while special subtitle is active) ----
             _statusCounter++;
+            if (_suppressStatusTicks > 0) _suppressStatusTicks--;
             if (_statusCounter % 30 == 0)
             {
                 if (_showQueue)
@@ -294,11 +299,11 @@ namespace GTA5AutoPilot
                 }
                 else if (_nluShowTimer > 0)
                 {
-                    GTA.UI.Screen.ShowSubtitle(_lastNluResult ?? "", 800);
+                    GTA.UI.Screen.ShowSubtitle(_lastNluResult ?? "", 2000);
                 }
-                else if (_arrivalDisplayTimer > 0)
+                else if (_arrivalDisplayTimer > 0 || _suppressStatusTicks > 0)
                 {
-                    // prompt handles display — skip normal status
+                    // suppress normal status
                 }
                 else
                 {
@@ -318,6 +323,8 @@ namespace GTA5AutoPilot
             else if (e.KeyCode == Keys.NumPad1) ContinueNavigation();
             else if (e.KeyCode == Keys.NumPad2) StopAutopilot();
             else if (e.KeyCode == Keys.NumPad3) _showQueue = true;
+            else if (e.KeyCode == Keys.NumPad4) AdjustAggression(-0.05f);
+            else if (e.KeyCode == Keys.NumPad5) AdjustAggression(+0.05f);
             else if (e.KeyCode == Keys.NumPad6) ShowNluKeyboard();
             else if (e.KeyCode == Keys.Decimal && _autoPilotEnabled) StopAutopilot();
             e.Handled = true;
@@ -326,6 +333,22 @@ namespace GTA5AutoPilot
         private void OnKeyUp(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.NumPad3) _showQueue = false;
+        }
+
+        private static readonly float[] AggressionPresets = { 0.0f, 0.1f, 0.15f, 0.2f };
+        private static readonly string[] AggressionNames = { "Sloth", "Base", "Aggressive", "Mad Max" };
+        private int _aggressionIndex = 2; // start at 0.15
+
+        private void AdjustAggression(float delta)
+        {
+            _aggressionIndex = (_aggressionIndex + (delta > 0 ? 1 : 3)) % 4;
+            _driverAggression = AggressionPresets[_aggressionIndex];
+            var driver = Game.Player.Character;
+            if (driver != null && driver.Exists() && driver.IsInVehicle())
+                Function.Call(Hash.SET_DRIVER_AGGRESSIVENESS, driver, _driverAggression);
+            GTA.UI.Screen.ShowSubtitle(
+                $"Driving Style: {AggressionNames[_aggressionIndex]} ({_driverAggression:F2})", 2000);
+            _suppressStatusTicks = 90; // ~1.5s
         }
 
         private void ShowNluKeyboard()

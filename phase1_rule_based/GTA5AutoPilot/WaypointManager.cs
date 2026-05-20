@@ -151,7 +151,7 @@ namespace GTA5AutoPilot
             if (State != NavigateState.Waiting) return "";
             if (_waypoints.Count == 0)
                 return "Navigation complete.";
-            return $"Arrived. Continue to {_waypoints[0].Name}? (Num7=Yes / Num8=No)";
+            return $"Arrived. Continue to {_waypoints[0].Name}? (Num1=Yes / Num2=No)";
         }
     }
 }
