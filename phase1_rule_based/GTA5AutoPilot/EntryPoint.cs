@@ -318,7 +318,7 @@ namespace GTA5AutoPilot
             else if (e.KeyCode == Keys.NumPad1) ContinueNavigation();
             else if (e.KeyCode == Keys.NumPad2) StopAutopilot();
             else if (e.KeyCode == Keys.NumPad3) _showQueue = true;
-            else if (e.KeyCode == Keys.NumPad9) ShowNluKeyboard();
+            else if (e.KeyCode == Keys.NumPad6) ShowNluKeyboard();
             else if (e.KeyCode == Keys.Decimal && _autoPilotEnabled) StopAutopilot();
             e.Handled = true;
         }
