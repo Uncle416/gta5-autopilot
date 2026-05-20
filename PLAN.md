@@ -2,11 +2,11 @@
 
 ## 项目概述
 
-在 GTA V 中开发一个**自然语言多点导航自动驾驶 mod**。用户通过终端对话界面向内置的小模型输入目的地描述（如"先去机场，再去海滩，最后回家"），模型解析出地点和途经顺序后，由游戏内置 AI 驾驶 API 依次开车到达每个途经点，到达后询问用户是否继续。
+在 GTA V 中开发一个**自然语言多点导航自动驾驶 mod**。利用 GTA V 原生 AI 驾驶 API（`TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE`），配合嵌入式 LLM（LlamaSharp + GGUF）实现自然语言导航解析，支持多点途经、红绿灯合规、自动刹车停靠。
 
 ### 核心理念
 
-**直接利用 GTA V 自身的自动驾驶API**（`TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE`），在上面包装一层自然语言理解（NLU）+ 多点导航管理。
+**直接利用 GTA V 自身的自动驾驶 API**，在上面包装一层自然语言理解（NLU）+ 多点导航管理。NPC 式驾驶体验：任务只发一次，仅卡住时重发。
 
 ---
 
@@ -17,8 +17,7 @@
 | Mod 加载 | Script Hook V |
 | 脚本 API | Script Hook V .NET Enhanced v3 (C#, .NET Framework 4.8) |
 | 序列化 | Newtonsoft.Json (JSON over TCP) |
-| NLU 模型 | Ollama + Qwen2.5-1.5B (本地运行) |
-| NLU 侧车 | Python 3.10+ |
+| NLU 模型 | LlamaSharp 0.11.2 + Qwen 0.5B GGUF (嵌入式，无需外部进程) |
 | 通信 | TCP localhost (端口 21556) |
 
 ---
@@ -31,47 +30,27 @@ GTA/
 ├── .gitignore
 ├── PLAN.md
 │
-├── phase1_rule_based/
-│   ├── phase1_status.md
-│   └── GTA5AutoPilot/
-│       ├── GTA5AutoPilot.csproj
-│       ├── EntryPoint.cs              # SHVDN 入口，OnTick 主循环 + 键位
-│       ├── Configuration.cs           # 全局可调参数
-│       ├── SensorData.cs              # 传感器数据结构体
-│       ├── DrivingCommand.cs          # 控制指令结构体
-│       ├── DecisionEngine.cs          # 决策状态机 (预留)
-│       ├── WaypointManager.cs         # 途经点队列 & 导航状态机 ★
-│       ├── Networking/
-│       │   └── TcpCommandServer.cs    # TCP JSON 指令接收 ★
-│       ├── Modules/
-│       │   ├── VehicleController.cs   # 车辆底层控制 (预留)
-│       │   ├── PathNavigator.cs       # 道路节点导航 (stub)
-│       │   ├── EntityDetector.cs      # 周围实体检测
-│       │   ├── CollisionPredictor.cs  # 碰撞风险评估
-│       │   ├── LaneKeeper.cs          # 车道保持 PID (预留)
-│       │   ├── SpeedGovernor.cs       # 速度调控 (预留)
-│       │   ├── TrafficLightDetector.cs # 红绿灯检测 (预留)
-│       │   └── IntersectionHandler.cs # 路口处理 (预留)
-│       ├── Debug/
-│       │   ├── DebugOverlay.cs        # 屏幕调试信息
-│       │   └── DebugCommands.cs       # 键盘快捷键
-│       ├── NativeWrappers/
-│       │   ├── TrafficLightUtils.cs
-│       │   ├── PathfindingUtils.cs    # (stubbed — SHVDN v3 不支持)
-│       │   └── VehicleControlUtils.cs
-│       └── Telemetry/
-│           └── TelemetryExporter.cs   # TCP 遥测导出 (预留)
-│
-└── nlu_sidecar/
-    ├── requirements.txt               # ollama
-    ├── config.py                      # 模型 & 端口配置
-    ├── chat_server.py                 # 终端对话入口
-    ├── nlu_engine.py                  # NLU 核心：自然语言 → 途经点
-    ├── tcp_client.py                  # TCP 连接 C# mod
-    └── gta_gazetteer.json             # GTA V 地名 → 坐标词典
+└── phase1_rule_based/
+    └── GTA5AutoPilot/
+        ├── GTA5AutoPilot.csproj
+        ├── EntryPoint.cs              # SHVDN 入口，OnTick 主循环 + 键位
+        ├── Configuration.cs           # 全局可调参数
+        ├── SensorData.cs              # 传感器数据结构体
+        ├── DrivingCommand.cs          # 控制指令结构体
+        ├── WaypointManager.cs         # 途经点队列 & 导航状态机
+        ├── Networking/
+        │   └── TcpCommandServer.cs    # TCP JSON 指令接收
+        ├── Modules/
+        │   ├── VehicleController.cs   # 车辆底层控制
+        │   ├── PathNavigator.cs       # 道路节点导航 (stub)
+        │   ├── EntityDetector.cs      # 周围实体检测
+        │   ├── CollisionPredictor.cs  # 碰撞风险评估
+        │   └── LlamaNavigator.cs      # LLM 导航解析 (LlamaSharp 嵌入式)
+        ├── Debug/
+        │   └── DebugOverlay.cs        # 屏幕调试信息 (默认关闭)
+        └── NativeWrappers/
+            └── PathfindingUtils.cs    # (stubbed — SHVDN v3 不支持)
 ```
-
-★ = 本版本新增/核心文件
 
 ---
 
@@ -80,33 +59,28 @@ GTA/
 ### 数据流
 
 ```
-User Terminal
-    │  "先去机场，再去海滩，最后回家"
+User
+    │  Num9 → 键盘输入 "去机场然后回家"
     ▼
-chat_server.py
+OnScreenKeyboard (GTA 原生)
     │
     ▼
-nlu_engine.py
-    ├─► Ollama + Qwen2.5-1.5B → 提取地名列表
-    └─► gta_gazetteer.json → 地名模糊匹配 → 坐标
-    │
-    ▼ JSON: {"type":"set_waypoints","waypoints":[...]}
-tcp_client.py → TCP 127.0.0.1:21556
+LlamaNavigator.cs (后台线程)
+    ├─► LlamaSharp + Qwen 0.5B GGUF → 提取地名列表
+    └─► 内置 Gazetteer (30+ 地名) → 模糊匹配 → 坐标
     │
     ▼
-TcpCommandServer.cs (后台线程)
-    │ OnWaypointsReceived 事件
-    ▼
-WaypointManager.cs
-    │ LoadWaypoints + StartNavigation
+WaypointManager.LoadWaypoints + StartNavigation
+    │
     ▼
 EntryPoint.OnTick
     │ 每帧执行:
     ├─► WaypointManager.State == Driving
-    │     ├─► TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE (每2秒)
+    │     ├─► TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE (首发一次，卡住才重发)
+    │     ├─► 进度检测 (每6s) → 区分等红灯 vs 真卡住
     │     └─► 距离检测 → 到达?
-    │           ├─ 非最终站 → Waiting 状态 → 询问用户 → Num7继续 / Num8停车
-    │           └─ 最终站 → 显示"到达终点" → 停止
+    │           ├─ 非最终站 → 刹车循环 → Waiting → Num7继续 / Num8停止
+    │           └─ 最终站 → 刹车停稳 → 显示"到达终点"
     │
     └─► WaypointManager.State == Waiting
           └─► 等待按键或TCP指令
@@ -145,18 +119,28 @@ EntryPoint.OnTick
 
 ---
 
-## 关键 GTA V Native 函数
+## 关键驾驶参数
 
-| 函数 | 用途 |
-|------|------|
-| `TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE` | 核心 AI 驾驶，接受坐标+速度+标志 |
-| `CLEAR_PED_TASKS` | 停止自动驾驶 |
-| `GET_FIRST_BLIP_INFO_ID` / `GET_BLIP_INFO_ID_COORD` | 读取地图标记点（备用） |
-| `World.GetNearbyVehicles` / `World.GetNearbyPeds` | 实体检测（调试用） |
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| AiDrivingSpeed | 25f (90 km/h) | 巡航速度 |
+| Aggressiveness | 0.15 | 驾驶激进程度 |
+| AiDrivingFlags | `1|2|8|16|32|64|128|2048` | 见下方说明 |
+| DestinationArrivalRadius | 25f | 到达判定距离 |
+| AiTaskReissueInterval | 300 | 安全兜底重发间隔 |
 
-### SHVDN v3 已知限制
+### Driving Flags 说明
 
-所有路径寻找 API (`GET_NTH_CLOSEST_VEHICLE_NODE` 等) 在 Enhanced v3 中会导致崩溃/冻结，因此完全依赖原生 AI 驾驶 API 处理导航和避障。
+| Flag | 值 | 作用 |
+|------|-----|------|
+| 1 | 1 | 前方有车停止 |
+| 2 | 2 | 前方有行人停止 |
+| 8 | 8 | 只避开空车（不绕排队车辆） |
+| 16 | 16 | 避开行人 |
+| 32 | 32 | 避开障碍物 |
+| 64 | 64 | 不绕玩家行人 |
+| 128 | **128** | **停红灯**（Enhanced 版确认） |
+| 2048 | 2048 | 到达时可停车 |
 
 ---
 
@@ -166,49 +150,20 @@ EntryPoint.OnTick
 |------|------|
 | **NumPad0** | 开关自动驾驶 |
 | **NumPad1** | 开关调试面板 |
-| **NumPad2** | 从地图标记点设目的地（备用） |
+| **NumPad2** | 从地图标记添加途经点 |
+| **NumPad3** | 按住显示途经队列 |
 | **NumPad7** | **是** — 继续到下一站 |
 | **NumPad8** | **否** — 停止导航 |
+| **NumPad9** | NLU 自然语言输入（需下载 GGUF 模型） |
 | **小数点 (.)** | 紧急停止 |
 
 ---
 
-## NLU Sidecar 使用说明
+## 自然语言导航 (Num9)
 
-### 安装
+代码已就绪，唯一阻塞项：**下载 Qwen 0.5B GGUF 模型文件**，放到 `D:\Epic Games\GTAVEnhanced\scripts\models\qwen-0.5b-q4.gguf`。
 
-```bash
-# 1. 安装 Ollama
-# macOS: brew install ollama
-# Windows: https://ollama.com/download
-
-# 2. 拉取小模型
-ollama pull qwen2.5:1.5b
-
-# 3. 安装 Python 依赖
-cd nlu_sidecar
-pip install -r requirements.txt
-```
-
-### 使用
-
-```bash
-# 终端 1: 启动 GTA V（mod 会自动加载）
-
-# 终端 2: 启动 NLU 对话
-python nlu_sidecar/chat_server.py
-
-> 先去洛圣都国际机场，再去威斯普奇海滩，最后回麦克家
-正在解析...
-已识别 3 个导航点:
-  1. 洛圣都国际机场 (-1267, 2995)
-  2. 威斯普奇海滩 (-1550, -890)
-  3. 麦克家 (-812, 176)
-发送到游戏? (回车确认 / n 取消):
-已发送到游戏！在游戏中按 Numpad0 启动自动驾驶
-```
-
-到达每个途经点后，游戏中会显示提示，按 **NumPad7** 继续或 **NumPad8** 停止。也可以在终端输入 `/yes` 或 `/no`。
+下载后，在游戏中按 **Num9** → 弹出输入框 → 输入 "去机场然后回家" → 自动解析地名加入队列。
 
 ---
 
@@ -220,32 +175,20 @@ python nlu_sidecar/chat_server.py
 
 ### 构建命令
 ```bash
-cd phase1_rule_based
-PATH="/c/Program Files (x86)/dotnet:$PATH" dotnet build -c Release
+PATH="/c/Program Files (x86)/dotnet:$PATH" dotnet build -c Release "d:/GTA_drive/gta5-autopilot/phase1_rule_based/GTA5AutoPilot/GTA5AutoPilot.csproj"
 ```
 
 ### 部署命令
 ```bash
-cp bin/Release/net48/GTA5AutoPilot.dll "D:/Epic Games/GTAVEnhanced/scripts/"
-cp bin/Release/net48/Newtonsoft.Json.dll "D:/Epic Games/GTAVEnhanced/scripts/"
+cp "d:/GTA_drive/gta5-autopilot/phase1_rule_based/GTA5AutoPilot/bin/Release/net48/GTA5AutoPilot.dll" "D:/Epic Games/GTAVEnhanced/scripts/"
 ```
 
 ### 依赖
 - .NET Framework 4.8
 - x86 .NET SDK 8.0.420
 - Newtonsoft.Json 13.0.3 (NuGet)
-
----
-
-## 地名扩展
-
-编辑 `nlu_sidecar/gta_gazetteer.json` 添加更多地名。坐标可在游戏中通过调试面板或第三方工具获取。格式:
-
-```json
-{
-  "地名": {"x": -1267, "y": 2995, "z": 15}
-}
-```
+- LlamaSharp 0.11.2 + Backend.Cpu (NuGet)
+- llama.dll (AVX2) @ scripts/
 
 ---
 
@@ -253,8 +196,9 @@ cp bin/Release/net48/Newtonsoft.Json.dll "D:/Epic Games/GTAVEnhanced/scripts/"
 
 | 限制 | 说明 |
 |------|------|
-| 地名覆盖 | 初始 ~25 个常见地标，需手动扩展 |
-| 小模型精度 | Qwen2.5-1.5B 可能偶尔误识别地名 |
-| AI 驾驶质量 | 完全依赖 GTA V 原生 AI，可能绕路或卡住 |
-| 到达检测 | 纯距离判断 (15m)，无法判断是否真正到达建筑物 |
-| 跨平台 | C# mod 仅 Windows，NLU sidecar 可跨平台 |
+| 地图多选途经点 | GTA V 同时只能有一个地图标记，脚本在暂停界面不运行 |
+| 地名覆盖 | 内置 ~30 个常见地标，需手动扩展 Gazetteer |
+| 小模型精度 | Qwen 0.5B 可能偶尔误识别地名 |
+| AI 驾驶质量 | 完全依赖 GTA V 原生 AI，选道/绕路不可精确控制 |
+| 路径寻找 API | Enhanced v3 全部不可用，完全依赖原生 AI 驾驶 |
+| LLM 模型 | 需用户自行下载 GGUF 文件 |
