@@ -2,8 +2,6 @@
 
 GTA V Enhanced 的自然语言多点导航自动驾驶 mod。利用游戏原生 AI 驾驶 API，支持红绿灯合规、多途经点导航、驾驶风格调节，以及嵌入式 LLM 自然语言输入。
 
-https://github.com/user-attachments/assets/00000000-0000-0000-0000-000000000000
-
 ## 功能
 
 - **原生 AI 驾驶** — 使用 `TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE`，NPC 式驾驶体验
@@ -101,4 +99,3 @@ cp bin/Release/net48/GTA5AutoPilot.dll "D:/Epic Games/GTAVEnhanced/scripts/"
 
 ## License
 
-MIT
