@@ -6,7 +6,7 @@ using GTA;
 using GTA.Math;
 using GTA.Native;
 using GTA5AutoPilot.Modules;
-using GTA5AutoPilot.Debug;
+
 using GTA5AutoPilot.Networking;
 
 namespace GTA5AutoPilot
@@ -22,7 +22,7 @@ namespace GTA5AutoPilot
         private PathNavigator _pathNav;
         private CollisionPredictor _collisionPredictor;
         private EntityDetector _entityDetector;
-        private DebugOverlay _debugOverlay;
+
         private WaypointManager _waypointManager;
         private TcpCommandServer _tcpServer;
         private LlamaNavigator _llamaNav;
@@ -72,7 +72,7 @@ namespace GTA5AutoPilot
             _pathNav = new PathNavigator();
             _collisionPredictor = new CollisionPredictor();
             _entityDetector = new EntityDetector();
-            _debugOverlay = new DebugOverlay();
+
             _waypointManager = new WaypointManager();
 
             _tcpServer = new TcpCommandServer(Configuration.CommandServerPort);
@@ -315,11 +315,9 @@ namespace GTA5AutoPilot
         private void OnKeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.NumPad0) ToggleAutoPilot();
-            else if (e.KeyCode == Keys.NumPad1) ToggleDebugOverlay();
-            else if (e.KeyCode == Keys.NumPad2) AddCurrentMapBlip();
+            else if (e.KeyCode == Keys.NumPad1) ContinueNavigation();
+            else if (e.KeyCode == Keys.NumPad2) StopAutopilot();
             else if (e.KeyCode == Keys.NumPad3) _showQueue = true;
-            else if (e.KeyCode == Keys.NumPad7) ContinueNavigation();
-            else if (e.KeyCode == Keys.NumPad8) StopAutopilot();
             else if (e.KeyCode == Keys.NumPad9) ShowNluKeyboard();
             else if (e.KeyCode == Keys.Decimal && _autoPilotEnabled) StopAutopilot();
             e.Handled = true;
@@ -344,11 +342,7 @@ namespace GTA5AutoPilot
                 "e.g. 去机场然后回家", 200);
         }
 
-        public void ToggleDebugOverlay()
-        {
-            _debugOverlay.Enabled = !_debugOverlay.Enabled;
-            GTA.UI.Screen.ShowSubtitle(_debugOverlay.Enabled ? "Debug ON" : "Debug OFF", 2000);
-        }
+
 
         public void ToggleAutoPilot()
         {
@@ -395,26 +389,6 @@ namespace GTA5AutoPilot
             }
             catch { }
             return Vector3.Zero;
-        }
-
-        private void AddCurrentMapBlip()
-        {
-            Vector3 wp = ReadMapBlipPos();
-            if (wp == Vector3.Zero)
-            {
-                GTA.UI.Screen.ShowSubtitle("No map waypoint found", 2000);
-                return;
-            }
-            if (_waypointManager.ContainsNear(wp, 5f))
-            {
-                GTA.UI.Screen.ShowSubtitle("Already in queue", 2000);
-                return;
-            }
-            _waypointManager.AddWaypoint(new Waypoint($"WP{_waypointManager.TotalCount + 1}", wp));
-            _lastKnownBlipPos = wp;
-            SetGpsToCurrent();
-            GTA.UI.Screen.ShowSubtitle(
-                $"WP {_waypointManager.TotalCount} added | {_waypointManager.TotalCount} total", 3000);
         }
 
         public void ContinueNavigation()
