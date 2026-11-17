@@ -62,7 +62,19 @@ namespace GTA5AutoPilot
         // --- Navigation ---
         public const int CommandServerPort = 21556;
         public const float DestinationArrivalRadius = 25f;    // Arrival threshold
-        public const int DestinationStuckTimeout = 600;       // ~10s stuck near dest → skip
+        public const int DestinationStuckTimeout = 600;       // legacy (tick-based), no longer used
+        public const float NearDestinationRadius = 40f;       // "close enough" ring around the destination
+
+        // Time-based watchdog (milliseconds on the script clock, which does not run while the game is paused).
+        // All of these are untested starting values: calibrate on Windows.
+        public const int ProgressCheckMs = 6000;          // progress check window
+        public const int TaskSafetyReissueMs = 30000;     // re-issue the drive task at least this often when not progressing
+        public const float StationaryMoveThreshold = 5f;  // moved less than this in one window = stationary
+        public const int NearStationaryArriveMs = 18000;  // stationary this long inside the near ring = "arrived (near)"
+        public const int StuckStationaryMs = 90000;       // stationary this long elsewhere = stuck (must exceed red lights / jams)
+        public const int ArrivalBrakeTimeoutMs = 8000;    // give up braking politely after this and zero the speed
+        public const int StateHeartbeatMs = 1000;         // TCP state heartbeat interval
+        public const int MaxRouteStops = 20;
         public const int AiTaskReissueInterval = 300;  // ~10s, longer so AI can complete maneuvers (e.g. stop at red lights)
         public const float AiDrivingSpeed = 25f;
         public const int AiDrivingFlags = 1 | 2 | 8 | 16 | 32 | 64 | 128 | 2048;

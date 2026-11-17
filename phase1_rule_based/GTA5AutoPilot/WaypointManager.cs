@@ -6,11 +6,19 @@ namespace GTA5AutoPilot
 {
     public class Waypoint
     {
+        public string Id;      // gazetteer id from the agent; may be null for map-picked points
         public string Name;
         public Vector3 Position;
 
         public Waypoint(string name, Vector3 pos)
         {
+            Name = name;
+            Position = pos;
+        }
+
+        public Waypoint(string id, string name, Vector3 pos)
+        {
+            Id = id;
             Name = name;
             Position = pos;
         }
@@ -20,8 +28,9 @@ namespace GTA5AutoPilot
     {
         Idle,      // No navigation task
         Driving,   // Driving to current waypoint
-        Arrived,   // Reached current waypoint
-        Waiting,   // Waiting for user confirmation to continue
+        Arrived,   // Reached current waypoint (unused, kept for compatibility)
+        Waiting,   // Stopped at an intermediate waypoint, waiting for "continue"
+        Stuck,     // Gave up driving to the current waypoint; waiting for retry / skip / stop
     }
 
     public class WaypointManager
@@ -38,12 +47,31 @@ namespace GTA5AutoPilot
                 ? _waypoints[_currentIndex].Name : "";
         public bool IsLastWaypoint => _waypoints.Count <= 1;
 
+        /// <summary>The waypoint currently being driven to (or the next one while Waiting), or null.</summary>
+        public Waypoint Current =>
+            (_currentIndex >= 0 && _currentIndex < _waypoints.Count)
+                ? _waypoints[_currentIndex] : null;
+
+        /// <summary>Horizontal distance. Stored Z values are not reliable enough for arrival checks.</summary>
+        public static float Distance2D(Vector3 a, Vector3 b)
+        {
+            float dx = a.X - b.X;
+            float dy = a.Y - b.Y;
+            return (float)System.Math.Sqrt(dx * dx + dy * dy);
+        }
+
         public void LoadWaypoints(List<Waypoint> waypoints)
         {
             _waypoints.Clear();
             _waypoints.AddRange(waypoints);
             _currentIndex = -1;
             State = NavigateState.Idle;
+        }
+
+        /// <summary>Add stops to the end of the queue without touching the current leg.</summary>
+        public void AppendWaypoints(List<Waypoint> waypoints)
+        {
+            _waypoints.AddRange(waypoints);
         }
 
         public bool StartNavigation()
@@ -73,8 +101,9 @@ namespace GTA5AutoPilot
                 return true;
             }
             // Remove completed waypoint, next becomes index 0
+            if (_currentIndex < 0 || _currentIndex >= _waypoints.Count) _currentIndex = 0;
             _waypoints.RemoveAt(_currentIndex);
-            // _currentIndex stays valid; if not last, point to next (now at same index)
+            _currentIndex = 0;
             State = NavigateState.Waiting;
             return false;
         }
@@ -90,6 +119,52 @@ namespace GTA5AutoPilot
             _currentIndex = 0;
             State = NavigateState.Driving;
             return true;
+        }
+
+        /// <summary>Driving -> Stuck. The waypoint stays in the queue.</summary>
+        public bool MarkStuck()
+        {
+            if (State != NavigateState.Driving) return false;
+            State = NavigateState.Stuck;
+            return true;
+        }
+
+        /// <summary>Stuck -> Driving, same waypoint.</summary>
+        public bool Retry()
+        {
+            if (State != NavigateState.Stuck || Current == null) return false;
+            State = NavigateState.Driving;
+            return true;
+        }
+
+        /// <summary>
+        /// Drop the current target without counting it as reached.
+        /// If navigation was active and stops remain, the next one becomes the driving target.
+        /// </summary>
+        /// <returns>The skipped waypoint, or null if the queue was empty.</returns>
+        public Waypoint SkipCurrent()
+        {
+            if (_waypoints.Count == 0) return null;
+            bool active = State != NavigateState.Idle;
+            int idx = (_currentIndex >= 0 && _currentIndex < _waypoints.Count) ? _currentIndex : 0;
+            Waypoint skipped = _waypoints[idx];
+            _waypoints.RemoveAt(idx);
+
+            if (_waypoints.Count == 0)
+            {
+                _currentIndex = -1;
+                State = NavigateState.Idle;
+            }
+            else if (active)
+            {
+                _currentIndex = 0;
+                State = NavigateState.Driving;
+            }
+            else
+            {
+                _currentIndex = -1;
+            }
+            return skipped;
         }
 
         public string GetQueueString()
@@ -113,7 +188,7 @@ namespace GTA5AutoPilot
         public bool ContainsNear(Vector3 pos, float threshold)
         {
             foreach (var wp in _waypoints)
-                if (Vector3.Distance(wp.Position, pos) < threshold)
+                if (Distance2D(wp.Position, pos) < threshold)
                     return true;
             return false;
         }
@@ -132,11 +207,12 @@ namespace GTA5AutoPilot
 
         public string GetStatusString(Vehicle vehicle)
         {
-            if (State != NavigateState.Driving && State != NavigateState.Waiting)
+            if (State != NavigateState.Driving && State != NavigateState.Waiting && State != NavigateState.Stuck)
                 return "";
 
-            float dist = Vector3.Distance(vehicle.Position, GetCurrentDestination());
-            return $"-> {CurrentWaypointName} | {dist:F0}m | {TotalCount} left";
+            float dist = Distance2D(vehicle.Position, GetCurrentDestination());
+            string prefix = State == NavigateState.Stuck ? "STUCK " : "";
+            return $"{prefix}-> {CurrentWaypointName} | {dist:F0}m | {TotalCount} left";
         }
 
         public string GetNextWaypointName()

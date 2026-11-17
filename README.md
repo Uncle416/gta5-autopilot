@@ -100,6 +100,13 @@ GTA V Enhanced 多途经点导航原型。游戏原生 NPC AI 负责底层驾驶
 
 ### 最近一次交接
 
+- 日期：2026-11-17（Mac 端，Claude 协助）。
+- 本轮：新增 TCP 协议 v2（[docs/PROTOCOL.md](docs/PROTOCOL.md)）；重写 `TcpCommandServer.cs`，修改 `EntryPoint.cs`、`WaypointManager.cs`、`Configuration.cs`；新增 `tools/`（协议客户端、打通测试脚本、模拟游戏端）和 `tests/`。
+- 验证：Python 端 18 个协议测试对模拟游戏端通过。**C# 改动没有编译过，也没有进游戏运行**，只做了括号配对检查和人工审读。
+- 下一步：Windows 端按 [docs/WINDOWS_SMOKE_TEST.md](docs/WINDOWS_SMOKE_TEST.md) 编译并逐项验收，把结果填回该文件。
+
+#### 上一次交接
+
 - 日期：2026-10-22。
 - 本轮：只更新 README，明确职责、状态、目标与验收步骤。
 - 验证：Mac 静态阅读；未构建 Windows 项目，未启动游戏，未运行模型。
@@ -168,7 +175,7 @@ GTA V Enhanced 多途经点导航原型。游戏原生 NPC AI 负责底层驾驶
 
 ## TCP 接口
 
-外部程序可通过 TCP 发送 JSON 指令：
+协议 v2（带回执、事件和状态心跳，代码已写、待 Windows 验证）见 [docs/PROTOCOL.md](docs/PROTOCOL.md)。下面的旧版消息仍然兼容：
 
 ```
 端口: 21556
