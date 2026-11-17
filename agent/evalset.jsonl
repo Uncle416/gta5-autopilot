@@ -1,0 +1,60 @@
+{"id": "new-01", "tag": "new", "text": "先去国际机场，再去威斯普奇海滩", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["lsia", "vespucci_beach"]}}
+{"id": "new-02", "tag": "new", "text": "带我去钻石赌场", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["casino"]}}
+{"id": "new-03", "tag": "new", "text": "去天文台看看夜景", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["observatory"]}}
+{"id": "new-04", "tag": "new", "text": "先去麦克家，然后去高尔夫球场，最后去赌场", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["michael_house", "golf", "casino"]}}
+{"id": "new-05", "tag": "new", "text": "go to the casino then the observatory", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["casino", "observatory"]}}
+{"id": "new-06", "tag": "new", "text": "我要去崔佛的拖车那儿", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["trevor_trailer"]}}
+{"id": "new-07", "tag": "new", "text": "送我去机场", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["lsia"]}}
+{"id": "new-08", "tag": "new", "text": "去沙漠里那个小机场", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["sandy_airfield"]}}
+{"id": "new-09", "tag": "new", "text": "想去海边吹吹风", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["vespucci_beach"]}}
+{"id": "new-10", "tag": "new", "text": "去趟FIB大楼，然后回麦克家", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["fib", "michael_house"]}}
+{"id": "new-11", "tag": "new", "text": "帮我导航到佩立托湾", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["paleto_bay"]}}
+{"id": "new-12", "tag": "new", "text": "去桑迪海岸医院", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["hospital_sandy"]}}
+{"id": "new-13", "tag": "new", "text": "去机场那家改车王", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["lsc_lsia"]}}
+{"id": "order-01", "tag": "order", "text": "去机场接人，不过出发前先回趟麦克家", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["michael_house", "lsia"]}}
+{"id": "order-02", "tag": "order", "text": "去赌场之前先去一下市政厅", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["city_hall", "casino"]}}
+{"id": "order-03", "tag": "order", "text": "最后去天文台，在那之前先去赌场和高尔夫球场", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["casino", "golf", "observatory"]}}
+{"id": "order-04", "tag": "order", "text": "先去赌场，中途顺路去趟香草独角兽，再去机场", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops_any": [["casino", "unicorn", "lsia"], ["unicorn", "casino", "lsia"]]}}
+{"id": "infer-01", "tag": "infer", "text": "我想打两杆高尔夫", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["golf"]}}
+{"id": "infer-02", "tag": "infer", "text": "想坐摩天轮", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["del_perro_pier"]}}
+{"id": "infer-03", "tag": "infer", "text": "去看看那个巨大的 Vinewood 字牌", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["vinewood_sign"]}}
+{"id": "unknown-01", "tag": "unknown", "text": "去火星基地", "queue": [], "nav": "idle", "expect": {"kind": "clarify"}}
+{"id": "unknown-02", "tag": "unknown", "text": "先去赌场，然后去霍格沃茨", "queue": [], "nav": "idle", "expect": {"kind": "clarify"}}
+{"id": "unknown-03", "tag": "unknown", "text": "带我去星巴克", "queue": [], "nav": "idle", "expect": {"kind": "clarify"}}
+{"id": "unknown-04", "tag": "unknown", "text": "去北京天安门", "queue": [], "nav": "idle", "expect": {"kind": "clarify"}}
+{"id": "ambiguous-01", "tag": "ambiguous", "text": "带我去医院", "queue": [], "nav": "idle", "expect": {"kind": "clarify", "options_include": ["hospital_pillbox", "hospital_sandy"]}}
+{"id": "ambiguous-02", "tag": "ambiguous", "text": "去警察局自首", "queue": [], "nav": "idle", "expect": {"kind": "clarify", "options_include": ["police_mission_row"]}}
+{"id": "ambiguous-03", "tag": "ambiguous", "text": "回家", "queue": [], "nav": "idle", "expect": {"kind": "clarify", "options_include": ["michael_house", "trevor_trailer"]}}
+{"id": "ambiguous-04", "tag": "ambiguous", "text": "去改车王改个车", "queue": [], "nav": "idle", "expect": {"kind": "clarify", "options_include": ["lsc_burton"]}}
+{"id": "ambiguous-05", "tag": "ambiguous", "text": "去码头", "queue": [], "nav": "idle", "expect": {"kind": "clarify", "options_include": ["port", "del_perro_pier"]}}
+{"id": "ambiguous-06", "tag": "ambiguous", "text": "先去赌场然后去医院", "queue": [], "nav": "idle", "expect": {"kind": "clarify", "options_include": ["hospital_pillbox"]}}
+{"id": "contradiction-01", "tag": "contradiction", "text": "先去机场，又不要去机场", "queue": [], "nav": "idle", "expect": {"kind": "clarify"}}
+{"id": "contradiction-02", "tag": "contradiction", "text": "去赌场，算了不去赌场", "queue": [], "nav": "idle", "expect": {"kind": "clarify"}}
+{"id": "vague-01", "tag": "vague", "text": "随便带我去个地方", "queue": [], "nav": "idle", "expect": {"kind": "clarify"}}
+{"id": "vague-02", "tag": "vague", "text": "出去转转", "queue": [], "nav": "idle", "expect": {"kind": "clarify"}}
+{"id": "append-01", "tag": "append", "text": "再加一站海滩", "queue": ["lsia", "casino"], "nav": "driving", "expect": {"kind": "route", "stops": ["lsia", "casino", "vespucci_beach"]}}
+{"id": "append-02", "tag": "append", "text": "到了之后再去趟天文台", "queue": ["casino"], "nav": "driving", "expect": {"kind": "route", "stops": ["casino", "observatory"]}}
+{"id": "append-03", "tag": "append", "text": "最后再去一下麦克家", "queue": ["lsia", "golf"], "nav": "driving", "expect": {"kind": "route", "stops": ["lsia", "golf", "michael_house"]}}
+{"id": "edit-01", "tag": "edit", "text": "不去机场了，改去高尔夫球场", "queue": ["lsia", "casino"], "nav": "driving", "expect": {"kind": "route", "stops": ["golf", "casino"]}}
+{"id": "edit-02", "tag": "edit", "text": "把赌场换成天文台", "queue": ["lsia", "casino"], "nav": "driving", "expect": {"kind": "route", "stops": ["lsia", "observatory"]}}
+{"id": "edit-03", "tag": "edit", "text": "赌场那站取消", "queue": ["lsia", "casino", "golf"], "nav": "driving", "expect": {"kind": "route", "stops": ["lsia", "golf"]}}
+{"id": "edit-04", "tag": "edit", "text": "先去趟市政厅再去机场", "queue": ["lsia", "casino"], "nav": "driving", "expect": {"kind": "route", "stops": ["city_hall", "lsia", "casino"]}}
+{"id": "edit-05", "tag": "edit", "text": "不去高尔夫球场了", "queue": ["lsia", "golf", "casino"], "nav": "driving", "expect": {"kind": "route", "stops": ["lsia", "casino"]}}
+{"id": "edit-06", "tag": "edit", "text": "把最后一站改成麦克家", "queue": ["lsia", "casino"], "nav": "driving", "expect": {"kind": "route", "stops": ["lsia", "michael_house"]}}
+{"id": "edit-07", "tag": "edit", "text": "算了都不去了，直接去麦克家", "queue": ["lsia", "casino"], "nav": "driving", "expect": {"kind": "route", "stops": ["michael_house"]}}
+{"id": "negation-01", "tag": "negation", "text": "别去机场，去赌场", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["casino"]}}
+{"id": "negation-02", "tag": "negation", "text": "除了机场哪都行，就去天文台吧", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["observatory"]}}
+{"id": "control-01", "tag": "control", "text": "别开了快停下来", "queue": ["lsia"], "nav": "driving", "expect": {"kind": "control", "action": "stop"}}
+{"id": "control-02", "tag": "control", "text": "整个行程都取消掉", "queue": ["lsia", "casino"], "nav": "driving", "expect": {"kind": "control", "action": "stop"}}
+{"id": "control-03", "tag": "control", "text": "这一站不用停了，直接去下一个", "queue": ["lsia", "casino"], "nav": "driving", "expect": {"kind": "control", "action": "skip"}}
+{"id": "control-04", "tag": "control", "text": "我们现在到哪儿啦", "queue": ["lsia"], "nav": "driving", "expect": {"kind": "control", "action": "status"}}
+{"id": "control-05", "tag": "control", "text": "可以走了，去下一站吧", "queue": ["casino"], "nav": "waiting", "expect": {"kind": "control", "action": "continue"}}
+{"id": "control-06", "tag": "control", "text": "再试一次看看", "queue": ["casino"], "nav": "stuck", "expect": {"kind": "control", "action": "retry"}}
+{"id": "rule-01", "tag": "rule", "text": "停下", "queue": ["lsia"], "nav": "driving", "expect": {"kind": "control", "action": "stop"}, "no_llm": true}
+{"id": "rule-02", "tag": "rule", "text": "继续", "queue": ["casino"], "nav": "waiting", "expect": {"kind": "control", "action": "continue"}, "no_llm": true}
+{"id": "rule-03", "tag": "rule", "text": "跳过", "queue": ["lsia", "casino"], "nav": "driving", "expect": {"kind": "control", "action": "skip"}, "no_llm": true}
+{"id": "followup-01", "tag": "followup", "text": "桑迪海岸那家", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["hospital_sandy"]}, "history": [["user", "带我去医院"], ["assistant", "「医院」有好几个，你要去哪一个？"]], "pending": "clarify", "pending_option_ids": ["hospital_pillbox", "hospital_central", "hospital_zonah", "hospital_sandy", "hospital_paleto"], "scope_text": "带我去医院"}
+{"id": "followup-02", "tag": "followup", "text": "2", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["hospital_central"]}, "history": [["user", "带我去医院"], ["assistant", "「医院」有好几个，你要去哪一个？"]], "pending": "clarify", "pending_option_ids": ["hospital_pillbox", "hospital_central", "hospital_zonah", "hospital_sandy", "hospital_paleto"], "scope_text": "带我去医院"}
+{"id": "followup-03", "tag": "followup", "text": "麦克家", "queue": [], "nav": "idle", "expect": {"kind": "route", "stops": ["michael_house"]}, "history": [["user", "回家"], ["assistant", "「回家」有好几个，你要去哪一个？"]], "pending": "clarify", "pending_option_ids": ["michael_house", "franklin_house", "franklin_aunt", "trevor_trailer"], "scope_text": "回家"}
+{"id": "chat-01", "tag": "chat", "text": "你好呀", "queue": [], "nav": "idle", "expect": {"kind": "say"}}
+{"id": "chat-02", "tag": "chat", "text": "今天洛圣都天气怎么样", "queue": [], "nav": "idle", "expect": {"kind": "say"}}

@@ -33,3 +33,6 @@ phase2_vision/experiments/logs/
 Thumbs.db
 .claude/
 GTA.sln
+
+# Agent run logs
+tools/logs/
